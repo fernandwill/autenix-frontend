@@ -1,11 +1,14 @@
+import { Route, Routes } from "react-router-dom";
+
 // Main application layout stitches together uploads, hash lookup, and Solana status.
 import { FileUpload } from "@/components/file-upload";
 import { SolanaTransactionPanel } from "@/components/solana-transaction-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DocumentDetailPage } from "@/pages/document-detail-page";
 
-function App() {
+function HomePage() {
   return (
     <div className="flex min-h-screen flex-col bg-muted">
       <main className="flex flex-1 items-center justify-center px-4 py-12">
@@ -41,6 +44,15 @@ function App() {
         </div>
       </main>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/documents/:entryId" element={<DocumentDetailPage />} />
+    </Routes>
   );
 }
 

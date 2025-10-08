@@ -14,9 +14,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { buildDetailStorageKey, type DocumentDetailSnapshot, type UploadStatus } from "@/lib/upload-types";
 import { cn } from "@/lib/utils";
-
-type UploadStatus = "idle" | "converting" | "success" | "error";
 
 interface UploadEntry {
   id: string;
@@ -33,6 +32,8 @@ interface UploadEntry {
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const ACCEPTED_TYPES = ["application/pdf"] as const;
+
+const DETAIL_STORAGE_AVAILABLE = typeof window !== "undefined" && "localStorage" in window;
 
 // Normalizes whatever the env provides into a usable request path.
 const normalizeConverterEndpoint = (value?: string) => {
@@ -62,6 +63,65 @@ const formatBytes = (bytes: number) => {
   return `${size} ${units[power]}`;
 };
 
+const getStatusLabel = (status: UploadStatus) => {
+  switch (status) {
+    case "success":
+      return "Converted";
+    case "converting":
+      return "Converting";
+    case "error":
+      return "Error";
+    default:
+      return "Queued";
+  }
+};
+
+const getStatusDescription = (status: UploadStatus) => {
+  switch (status) {
+    case "success":
+      return "Your document has been notarized and the BIN payload is ready to use.";
+    case "error":
+      return "We were unable to convert this document. Review the status information below.";
+    default:
+      return "Conversion is running. You can leave this tab open while the process completes.";
+  }
+};
+
+const createDetailSnapshot = (entry: UploadEntry): DocumentDetailSnapshot => {
+  const uploadedAtLabel = entry.uploadedAt ? new Date(entry.uploadedAt).toLocaleString() : "Unavailable";
+  const statusLabel = getStatusLabel(entry.status);
+  const statusDescription = getStatusDescription(entry.status);
+  return {
+    id: entry.id,
+    fileName: entry.file.name,
+    sizeLabel: formatBytes(entry.file.size),
+    uploadedAt: entry.uploadedAt,
+    uploadedAtLabel,
+    status: entry.status,
+    statusLabel,
+    statusDescription,
+    checksum: entry.checksum ?? null,
+    hash: entry.hash ?? null,
+    downloadUrl: entry.downloadUrl ?? null,
+    convertedFileName: entry.convertedFileName ?? toBinFileName(entry.file.name),
+    error: entry.error ?? null,
+  };
+};
+
+const persistDetailSnapshot = (entry: UploadEntry) => {
+  if (!DETAIL_STORAGE_AVAILABLE) {
+    return;
+  }
+
+  try {
+    const key = buildDetailStorageKey(entry.id);
+    const snapshot = createDetailSnapshot(entry);
+    window.localStorage.setItem(key, JSON.stringify(snapshot));
+  } catch (error) {
+    console.warn("Failed to persist document detail snapshot.", error);
+  }
+};
+
 const arrayBufferToHex = (buffer: ArrayBuffer) =>
   Array.from(new Uint8Array(buffer))
     .map((byte) => byte.toString(16).padStart(2, "0"))
@@ -83,19 +143,6 @@ const computeDigestsFromBuffer = async (buffer: ArrayBuffer) => {
   };
 };
 
-const escapeHtml = (value: string) =>
-  value.replace(
-    /[&<>"']/g,
-    (character) =>
-      ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;",
-      }[character] ?? character),
-  );
-
 export function FileUpload() {
   const [entries, setEntries] = useState<UploadEntry[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -107,226 +154,28 @@ export function FileUpload() {
     };
   }, []);
 
-  const openEntryDetails = useCallback((entry: UploadEntry) => {
-    const detailWindow = window.open("", "_blank", "noopener,noreferrer");
-    if (!detailWindow) {
+  useEffect(() => {
+    if (!DETAIL_STORAGE_AVAILABLE) {
       return;
     }
 
-    const uploadedAt = entry.uploadedAt
-      ? new Date(entry.uploadedAt).toLocaleString()
-      : "Unavailable";
-    const checksum = entry.checksum ?? "Calculating...";
-    const hash = entry.hash ?? "Calculating...";
-    const statusLabel =
-      entry.status === "success"
-        ? "Converted"
-        : entry.status === "converting"
-          ? "Converting"
-          : entry.status === "error"
-            ? "Error"
-            : "Queued";
-    const downloadMarkup = entry.downloadUrl
-      ? `<a class="download" href="${entry.downloadUrl}" download="${escapeHtml(entry.convertedFileName ?? "file.bin")}">
-            Download BIN
-         </a>`
-      : "<span class=\"pending\">Not available yet</span>";
-    const sizeLabel = formatBytes(entry.file.size);
-    const statusDescription =
-      entry.status === "success"
-        ? "Your document has been notarized and the BIN payload is ready to use."
-        : entry.status === "error"
-          ? "We were unable to convert this document. Review the status information below."
-          : "Conversion is running. You can leave this tab open while the process completes.";
+    entries.forEach((entry) => {
+      const key = buildDetailStorageKey(entry.id);
+      if (window.localStorage.getItem(key)) {
+        persistDetailSnapshot(entry);
+      }
+    });
+  }, [entries]);
 
-    const html = `
-      <!DOCTYPE html>
-      <html lang="en">
-        <head>
-          <meta charset="UTF-8" />
-          <title>Details | ${escapeHtml(entry.file.name)}</title>
-          <style>
-            :root {
-              color-scheme: light dark;
-              font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-              line-height: 1.6;
-            }
-            body {
-              margin: 0;
-              padding: 3.5rem 2rem;
-              background: #f5f7fb;
-              color: #0f172a;
-            }
-            .container {
-              max-width: 860px;
-              margin: 0 auto;
-              background: #fff;
-              border-radius: 16px;
-              padding: 3rem 3.25rem;
-              box-shadow: 0 20px 55px rgba(15, 23, 42, 0.15);
-            }
-            h1 {
-              font-size: 2rem;
-              margin-bottom: 0.75rem;
-              color: #0f172a;
-            }
-            .grid {
-              display: grid;
-              gap: 2.5rem;
-              grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-              align-items: center;
-            }
-            .preview {
-              display: flex;
-              justify-content: center;
-            }
-            .file-card {
-              width: 220px;
-              height: 300px;
-              border-radius: 18px;
-              border: 1px dashed #d1d5db;
-              background: linear-gradient(145deg, #f8fafc, #eef2ff);
-              color: #475569;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-weight: 600;
-              font-size: 1.05rem;
-              box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
-            }
-            .status {
-              display: flex;
-              flex-direction: column;
-              gap: 1.25rem;
-            }
-            .badge {
-              display: inline-flex;
-              align-items: center;
-              gap: 0.35rem;
-              padding: 0.45rem 0.85rem;
-              border-radius: 999px;
-              background: #dcfce7;
-              color: #15803d;
-              font-weight: 600;
-              font-size: 0.95rem;
-              width: fit-content;
-            }
-            .badge svg {
-              width: 18px;
-              height: 18px;
-            }
-            .description {
-              color: #475569;
-              font-size: 0.98rem;
-              max-width: 420px;
-            }
-            h2 {
-              font-size: 1.1rem;
-              font-weight: 700;
-              color: #111827;
-              margin-top: 3rem;
-              margin-bottom: 1.25rem;
-            }
-            dl {
-              display: grid;
-              grid-template-columns: minmax(170px, 1fr) minmax(0, 2fr);
-              gap: 1rem 2rem;
-            }
-            dt {
-              font-weight: 600;
-              color: #1f2937;
-            }
-            dd {
-              margin: 0;
-              font-family: "SFMono-Regular", ui-monospace, "Fira Code", "Fira Mono", monospace;
-              word-break: break-all;
-              color: #0f172a;
-            }
-            .meta {
-              margin-top: 0.25rem;
-              padding: 0.85rem 1rem;
-              border-radius: 12px;
-              background: #f1f5f9;
-              color: #475569;
-              font-size: 0.92rem;
-            }
-            a {
-              color: #2563eb;
-              text-decoration: none;
-            }
-            a:hover {
-              text-decoration: underline;
-            }
-            .download {
-              display: inline-flex;
-              align-items: center;
-              justify-content: center;
-              padding: 0.5rem 1rem;
-              border-radius: 999px;
-              background: #1d4ed8;
-              color: white;
-              text-decoration: none;
-              font-weight: 600;
-              font-size: 0.9rem;
-            }
-            .download:hover {
-              background: #1e40af;
-            }
-            .pending {
-              color: #9ca3af;
-            }
-            @media (max-width: 640px) {
-              body {
-                padding: 2rem 1.25rem;
-              }
-              .container {
-                padding: 2.5rem 1.75rem;
-              }
-              .file-card {
-                width: 200px;
-                height: 260px;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          <main class="container">
-            <h1>${escapeHtml(entry.file.name)}</h1>
-            <p class="meta">Uploaded ${escapeHtml(uploadedAt)} · ${escapeHtml(sizeLabel)}</p>
+  const openEntryDetails = useCallback((entry: UploadEntry) => {
+    persistDetailSnapshot(entry);
 
-            <div class="grid">
-              <div class="preview">
-                <div class="file-card">File</div>
-              </div>
-              <div class="status">
-                <span class="badge">✔ Document is Valid!</span>
-                <p class="description">${escapeHtml(statusDescription)}</p>
-                <div>${downloadMarkup}</div>
-              </div>
-            </div>
+    const detailUrl = `/documents/${encodeURIComponent(entry.id)}`;
+    const detailWindow = window.open(detailUrl, "_blank", "noopener,noreferrer");
 
-            <h2>File Information</h2>
-            <dl>
-              <dt>Title</dt>
-              <dd>${escapeHtml(entry.file.name)}</dd>
-              <dt>Size</dt>
-              <dd>${escapeHtml(sizeLabel)}</dd>
-              <dt>Status</dt>
-              <dd>${escapeHtml(statusLabel)}</dd>
-              <dt>Checksum</dt>
-              <dd>${escapeHtml(checksum)}</dd>
-              <dt>Created at</dt>
-              <dd>${escapeHtml(uploadedAt)}</dd>
-              <dt>Transaction hash</dt>
-              <dd>${escapeHtml(hash)}</dd>
-            </dl>
-          </main>
-        </body>
-      </html>
-    `;
-
-    detailWindow.document.write(html);
-    detailWindow.document.close();
+    if (!detailWindow) {
+      window.location.href = detailUrl;
+    }
   }, []);
 
   const convertEntry = useCallback(async (entry: UploadEntry) => {
