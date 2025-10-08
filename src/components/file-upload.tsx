@@ -127,10 +127,17 @@ export function FileUpload() {
             ? "Error"
             : "Queued";
     const downloadMarkup = entry.downloadUrl
-      ? `<a href="${entry.downloadUrl}" download="${escapeHtml(entry.convertedFileName ?? "file.bin")}">
+      ? `<a class="download" href="${entry.downloadUrl}" download="${escapeHtml(entry.convertedFileName ?? "file.bin")}">
             Download BIN
          </a>`
-      : "Not available yet";
+      : "<span class=\"pending\">Not available yet</span>";
+    const sizeLabel = formatBytes(entry.file.size);
+    const statusDescription =
+      entry.status === "success"
+        ? "Your document has been notarized and the BIN payload is ready to use."
+        : entry.status === "error"
+          ? "We were unable to convert this document. Review the status information below."
+          : "Conversion is running. You can leave this tab open while the process completes.";
 
     const html = `
       <!DOCTYPE html>
@@ -146,53 +153,102 @@ export function FileUpload() {
             }
             body {
               margin: 0;
-              padding: 2.5rem 1.75rem;
-              background: #f9fafb;
-              color: #111827;
+              padding: 3.5rem 2rem;
+              background: #f5f7fb;
+              color: #0f172a;
             }
             .container {
-              max-width: 720px;
+              max-width: 860px;
               margin: 0 auto;
               background: #fff;
               border-radius: 16px;
-              padding: 2rem 2.5rem;
-              box-shadow: 0 12px 40px rgba(15, 23, 42, 0.12);
+              padding: 3rem 3.25rem;
+              box-shadow: 0 20px 55px rgba(15, 23, 42, 0.15);
             }
             h1 {
-              font-size: 1.75rem;
-              margin-bottom: 0.25rem;
-              color: #111827;
+              font-size: 2rem;
+              margin-bottom: 0.75rem;
+              color: #0f172a;
+            }
+            .grid {
+              display: grid;
+              gap: 2.5rem;
+              grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+              align-items: center;
+            }
+            .preview {
+              display: flex;
+              justify-content: center;
+            }
+            .file-card {
+              width: 220px;
+              height: 300px;
+              border-radius: 18px;
+              border: 1px dashed #d1d5db;
+              background: linear-gradient(145deg, #f8fafc, #eef2ff);
+              color: #475569;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-weight: 600;
+              font-size: 1.05rem;
+              box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+            }
+            .status {
+              display: flex;
+              flex-direction: column;
+              gap: 1.25rem;
+            }
+            .badge {
+              display: inline-flex;
+              align-items: center;
+              gap: 0.35rem;
+              padding: 0.45rem 0.85rem;
+              border-radius: 999px;
+              background: #dcfce7;
+              color: #15803d;
+              font-weight: 600;
+              font-size: 0.95rem;
+              width: fit-content;
+            }
+            .badge svg {
+              width: 18px;
+              height: 18px;
+            }
+            .description {
+              color: #475569;
+              font-size: 0.98rem;
+              max-width: 420px;
             }
             h2 {
-              font-size: 1rem;
-              font-weight: 600;
-              text-transform: uppercase;
-              letter-spacing: 0.15em;
-              color: #6b7280;
-              margin-top: 2rem;
-              margin-bottom: 0.75rem;
+              font-size: 1.1rem;
+              font-weight: 700;
+              color: #111827;
+              margin-top: 3rem;
+              margin-bottom: 1.25rem;
             }
             dl {
               display: grid;
-              grid-template-columns: minmax(160px, 1fr) minmax(0, 2fr);
-              gap: 0.75rem 1.75rem;
+              grid-template-columns: minmax(170px, 1fr) minmax(0, 2fr);
+              gap: 1rem 2rem;
             }
             dt {
               font-weight: 600;
-              color: #374151;
+              color: #1f2937;
             }
             dd {
               margin: 0;
               font-family: "SFMono-Regular", ui-monospace, "Fira Code", "Fira Mono", monospace;
               word-break: break-all;
-              color: #1f2937;
+              color: #0f172a;
             }
             .meta {
-              margin-top: 1.5rem;
-              padding: 1rem 1.25rem;
+              margin-top: 0.25rem;
+              padding: 0.85rem 1rem;
               border-radius: 12px;
-              background: #f3f4f6;
-              color: #4b5563;
+              background: #f1f5f9;
+              color: #475569;
+              font-size: 0.92rem;
             }
             a {
               color: #2563eb;
@@ -201,23 +257,68 @@ export function FileUpload() {
             a:hover {
               text-decoration: underline;
             }
+            .download {
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              padding: 0.5rem 1rem;
+              border-radius: 999px;
+              background: #1d4ed8;
+              color: white;
+              text-decoration: none;
+              font-weight: 600;
+              font-size: 0.9rem;
+            }
+            .download:hover {
+              background: #1e40af;
+            }
+            .pending {
+              color: #9ca3af;
+            }
+            @media (max-width: 640px) {
+              body {
+                padding: 2rem 1.25rem;
+              }
+              .container {
+                padding: 2.5rem 1.75rem;
+              }
+              .file-card {
+                width: 200px;
+                height: 260px;
+              }
+            }
           </style>
         </head>
         <body>
           <main class="container">
             <h1>${escapeHtml(entry.file.name)}</h1>
-            <p class="meta">Uploaded ${escapeHtml(uploadedAt)} · ${escapeHtml(formatBytes(entry.file.size))}</p>
+            <p class="meta">Uploaded ${escapeHtml(uploadedAt)} · ${escapeHtml(sizeLabel)}</p>
 
-            <h2>File Details</h2>
+            <div class="grid">
+              <div class="preview">
+                <div class="file-card">File</div>
+              </div>
+              <div class="status">
+                <span class="badge">✔ Document is Valid!</span>
+                <p class="description">${escapeHtml(statusDescription)}</p>
+                <div>${downloadMarkup}</div>
+              </div>
+            </div>
+
+            <h2>File Information</h2>
             <dl>
+              <dt>Title</dt>
+              <dd>${escapeHtml(entry.file.name)}</dd>
+              <dt>Size</dt>
+              <dd>${escapeHtml(sizeLabel)}</dd>
               <dt>Status</dt>
               <dd>${escapeHtml(statusLabel)}</dd>
               <dt>Checksum</dt>
               <dd>${escapeHtml(checksum)}</dd>
-              <dt>Hash</dt>
+              <dt>Created at</dt>
+              <dd>${escapeHtml(uploadedAt)}</dd>
+              <dt>Transaction hash</dt>
               <dd>${escapeHtml(hash)}</dd>
-              <dt>BIN Output</dt>
-              <dd>${downloadMarkup}</dd>
             </dl>
           </main>
         </body>
