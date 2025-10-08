@@ -1,3 +1,4 @@
+// Main application layout stitches together uploads, hash lookup, and Solana status.
 import { FileUpload } from "@/components/file-upload";
 import { SolanaTransactionPanel } from "@/components/solana-transaction-panel";
 import { Button } from "@/components/ui/button";
@@ -10,12 +11,15 @@ function App() {
       <main className="flex flex-1 items-center justify-center px-4 py-12">
         <div className="grid w-full max-w-5xl gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
           <div className="space-y-6">
+            {/* File uploader remains the primary document ingestion path. */}
             <FileUpload />
+            {/* Divider offers a visual cue before the hash lookup path. */}
             <div className="flex items-center gap-4 text-xs font-semibold uppercase text-muted-foreground">
               <div className="h-px flex-1 bg-muted-foreground/40" aria-hidden="true" />
               <span aria-hidden="true">Or</span>
               <div className="h-px flex-1 bg-muted-foreground/40" aria-hidden="true" />
             </div>
+            {/* Simple search control lets users query notarized artifacts by hash. */}
             <div className="rounded-lg border bg-card p-6 shadow-sm">
               <Label htmlFor="document-hash-input" className="text-sm font-medium text-muted-foreground">
                 Enter document hash...

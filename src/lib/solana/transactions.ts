@@ -60,9 +60,11 @@ export async function sendMemoTransaction({
     computeUnitPrice: 1_000,
   });
 
+  // Compile a transaction message into the wire-ready transaction format.
   const compiledTransaction = compileTransaction(transactionMessage);
   const signedTransaction = await wallet.signTransaction(compiledTransaction);
   assertIsFullySignedTransaction(signedTransaction);
+  // Vite build expects Solana lifetime metadata, so we merge it back in before sending.
   const sendableTransaction: FullySignedTransaction & TransactionWithBlockhashLifetime = {
     ...signedTransaction,
     lifetimeConstraint: compiledTransaction.lifetimeConstraint,
