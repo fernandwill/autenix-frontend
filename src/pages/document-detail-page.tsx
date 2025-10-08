@@ -1,0 +1,224 @@
+import { useEffect, useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  Clock,
+  Download,
+  FileText,
+  Loader2,
+} from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import type { DocumentDetailSnapshot } from "@/lib/upload-types";
+import { buildDetailStorageKey } from "@/lib/upload-types";
+
+const loadSnapshot = (id: string): DocumentDetailSnapshot | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const stored = window.localStorage.getItem(buildDetailStorageKey(id));
+    if (!stored) {
+      return null;
+    }
+
+    return JSON.parse(stored) as DocumentDetailSnapshot;
+  } catch (error) {
+    console.warn("Unable to read stored document snapshot.", error);
+    return null;
+  }
+};
+
+const getStatusVisuals = (snapshot: DocumentDetailSnapshot) => {
+  switch (snapshot.status) {
+    case "success":
+      return {
+        icon: CheckCircle2,
+        badgeClass: "border-emerald-200 bg-emerald-100 text-emerald-700",
+      } as const;
+    case "error":
+      return {
+        icon: AlertTriangle,
+        badgeClass: "border-rose-200 bg-rose-100 text-rose-700",
+      } as const;
+    case "converting":
+      return {
+        icon: Loader2,
+        badgeClass: "border-sky-200 bg-sky-100 text-sky-700",
+      } as const;
+    default:
+      return {
+        icon: Clock,
+        badgeClass: "border-slate-200 bg-slate-100 text-slate-600",
+      } as const;
+  }
+};
+
+export function DocumentDetailPage() {
+  const { entryId } = useParams<{ entryId: string }>();
+  const [snapshot, setSnapshot] = useState<DocumentDetailSnapshot | null>(() =>
+    entryId ? loadSnapshot(entryId) : null,
+  );
+
+  useEffect(() => {
+    if (!entryId || typeof window === "undefined") {
+      return;
+    }
+
+    const refreshSnapshot = () => {
+      setSnapshot(loadSnapshot(entryId));
+    };
+
+    refreshSnapshot();
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === buildDetailStorageKey(entryId)) {
+        refreshSnapshot();
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [entryId]);
+
+  const statusVisuals = useMemo(() => (snapshot ? getStatusVisuals(snapshot) : null), [snapshot]);
+  const statusIconClass = snapshot?.status === "converting" ? "h-4 w-4 animate-spin" : "h-4 w-4";
+
+  return (
+    <div className="min-h-screen bg-slate-100">
+      <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-4 py-10">
+        <div className="flex items-center justify-between gap-4">
+          <Button variant="ghost" asChild className="gap-2">
+            <Link to="/">
+              <ArrowLeft className="h-4 w-4" /> Back to uploads
+            </Link>
+          </Button>
+          {entryId ? (
+            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Document ID: {entryId}
+            </span>
+          ) : null}
+        </div>
+
+        {snapshot ? (
+          <div className="mt-10 overflow-hidden rounded-3xl bg-white shadow-xl ring-1 ring-slate-200">
+            <div className="flex flex-col gap-8 border-b border-slate-100 px-8 py-10 md:flex-row md:items-start md:justify-between">
+              <div className="flex-1 space-y-6">
+                <div>
+                  <h1 className="text-3xl font-semibold text-slate-900">{snapshot.fileName}</h1>
+                  <p className="mt-2 text-sm text-slate-500">
+                    Uploaded {snapshot.uploadedAtLabel}
+                    <span className="mx-2">·</span>
+                    {snapshot.sizeLabel}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  {statusVisuals ? (
+                    <span
+                      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm font-semibold ${statusVisuals.badgeClass}`}
+                    >
+                      <statusVisuals.icon className={statusIconClass} />
+                      {snapshot.statusLabel}
+                    </span>
+                  ) : null}
+
+                  {snapshot.downloadUrl ? (
+                    <Button asChild className="gap-2">
+                      <a href={snapshot.downloadUrl} download={snapshot.convertedFileName ?? undefined}>
+                        <Download className="h-4 w-4" /> Download BIN
+                      </a>
+                    </Button>
+                  ) : (
+                    <span className="inline-flex items-center gap-2 rounded-full border border-dashed border-slate-300 px-3 py-1 text-sm font-medium text-slate-500">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Preparing download
+                    </span>
+                  )}
+                </div>
+
+                <p className="max-w-xl text-sm text-slate-600">{snapshot.statusDescription}</p>
+
+                {snapshot.error ? (
+                  <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+                    <AlertTriangle className="mt-0.5 h-4 w-4" />
+                    <span>{snapshot.error}</span>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="flex justify-center md:min-w-[200px]">
+                <div className="flex h-56 w-44 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-sm font-medium text-slate-500 shadow-inner">
+                  <FileText className="mb-4 h-8 w-8 text-slate-400" />
+                  Document preview
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-6 px-8 py-10 md:grid-cols-2">
+              <div className="space-y-4">
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    File name
+                  </span>
+                  <p className="mt-1 font-medium text-slate-900">{snapshot.fileName}</p>
+                </div>
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Size</span>
+                  <p className="mt-1 font-medium text-slate-900">{snapshot.sizeLabel}</p>
+                </div>
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    Status
+                  </span>
+                  <p className="mt-1 font-medium text-slate-900">{snapshot.statusLabel}</p>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    Uploaded at
+                  </span>
+                  <p className="mt-1 font-medium text-slate-900">{snapshot.uploadedAtLabel}</p>
+                </div>
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    Checksum
+                  </span>
+                  <p className="mt-1 font-mono text-sm text-slate-800">
+                    {snapshot.checksum ?? "Calculating..."}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    Transaction hash
+                  </span>
+                  <p className="mt-1 font-mono text-sm text-slate-800">
+                    {snapshot.hash ?? "Calculating..."}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-16 flex flex-1 flex-col items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm">
+            <FileText className="h-10 w-10 text-slate-400" />
+            <h2 className="mt-6 text-xl font-semibold text-slate-900">Document details unavailable</h2>
+            <p className="mt-3 max-w-md text-sm text-slate-500">
+              We couldn't find details for this upload. Try opening the document from the uploads page
+              again.
+            </p>
+            <Button asChild className="mt-6">
+              <Link to="/">Return to uploads</Link>
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
