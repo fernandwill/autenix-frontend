@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Route, Routes } from "react-router-dom";
 
 // Main application layout stitches together uploads, hash lookup, and Solana status.
-import { FileUpload } from "@/components/file-upload";
+import { FileUpload, type FileUploadDocumentChange } from "@/components/file-upload";
+import { DocumentSummaryCard } from "@/components/document-summary-card";
 import { SolanaTransactionPanel } from "@/components/solana-transaction-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,13 +11,15 @@ import { Label } from "@/components/ui/label";
 import { DocumentDetailPage } from "@/pages/document-detail-page";
 
 function HomePage() {
+  const [latestDocument, setLatestDocument] = useState<FileUploadDocumentChange | null>(null);
+
   return (
     <div className="flex min-h-screen flex-col bg-muted">
       <main className="flex flex-1 items-center justify-center px-4 py-12">
         <div className="grid w-full max-w-5xl gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
           <div className="space-y-6">
             {/* File uploader remains the primary document ingestion path. */}
-            <FileUpload />
+            <FileUpload onDocumentChange={setLatestDocument} />
             {/* Divider offers a visual cue before the hash lookup path. */}
             <div className="flex items-center gap-4 text-xs font-semibold uppercase text-muted-foreground">
               <div className="h-px flex-1 bg-muted-foreground/40" aria-hidden="true" />
@@ -40,7 +44,10 @@ function HomePage() {
               </div>
             </div>
           </div>
-          <SolanaTransactionPanel />
+          <div className="space-y-6">
+            <SolanaTransactionPanel />
+            <DocumentSummaryCard document={latestDocument} />
+          </div>
         </div>
       </main>
     </div>
