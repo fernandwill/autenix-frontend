@@ -8,6 +8,7 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./index.css";
 import { wagmiConfig } from "@/lib/wagmi";
+import { SolanaWalletProvider } from "@/lib/solana/wallet-context";
 
 const queryClient = new QueryClient();
 
@@ -16,7 +17,9 @@ createRoot(document.getElementById("root")!).render(
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
-          <App />
+          <SolanaWalletProvider>
+            <App />
+          </SolanaWalletProvider>
         </BrowserRouter>
       </QueryClientProvider>
     </WagmiProvider>

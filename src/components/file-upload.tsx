@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
+import type { Address } from "gill";
 import { CheckCircle2, FileText, Loader2, Upload, X } from "lucide-react";
 import { nanoid } from "nanoid";
 
@@ -16,6 +17,23 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { buildDetailStorageKey, type DocumentDetailSnapshot, type UploadStatus } from "@/lib/upload-types";
 import { cn } from "@/lib/utils";
+import { getSolanaClient } from "@/lib/solana/client";
+import { sendMemoTransaction } from "@/lib/solana/transactions";
+import { useSolanaWallet } from "@/lib/solana/wallet-context";
+
+export type FileUploadDocumentChange = {
+  id: string;
+  timestamp: string;
+  checksum: string | null;
+  hash: string | null;
+  transactionHash: string | null;
+  transactionStatus: "idle" | "pending" | "confirmed" | "cancelled" | "error";
+  error?: string | null;
+};
+
+type FileUploadProps = {
+  onDocumentChange?: (document: FileUploadDocumentChange) => void;
+};
 
 interface UploadEntry {
   id: string;
@@ -26,6 +44,9 @@ interface UploadEntry {
   checksum?: string;
   hash?: string;
   error?: string;
+  transactionSignature?: string;
+  transactionStatus?: FileUploadDocumentChange["transactionStatus"];
+  transactionError?: string;
 }
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
@@ -134,9 +155,36 @@ const computeDigestsFromBuffer = async (buffer: ArrayBuffer) => {
   };
 };
 
-export function FileUpload() {
+export function FileUpload({ onDocumentChange }: FileUploadProps) {
   const [entries, setEntries] = useState<UploadEntry[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const client = useMemo(() => getSolanaClient(), []);
+  const { address, signTransaction } = useSolanaWallet();
+
+  const wallet = useMemo(() => {
+    if (!address || !signTransaction) return null;
+    return {
+      address: address as Address<string>,
+      signTransaction,
+    };
+  }, [address, signTransaction]);
+
+  const emitDocumentChange = useCallback(
+    (entry: UploadEntry) => {
+      if (!onDocumentChange) return;
+
+      onDocumentChange({
+        id: entry.id,
+        timestamp: entry.uploadedAt,
+        checksum: entry.checksum ?? null,
+        hash: entry.hash ?? null,
+        transactionHash: entry.transactionSignature ?? null,
+        transactionStatus: entry.transactionStatus ?? "idle",
+        error: entry.transactionError ?? entry.error ?? null,
+      });
+    },
+    [onDocumentChange],
+  );
 
   useEffect(() => {
     if (!DETAIL_STORAGE_AVAILABLE) {
@@ -162,115 +210,198 @@ export function FileUpload() {
     }
   }, []);
 
-  const convertEntry = useCallback(async (entry: UploadEntry) => {
-    const { id, file } = entry;
+  const convertEntry = useCallback(
+    async (entry: UploadEntry) => {
+      const { id, file } = entry;
+      let currentEntry: UploadEntry = entry;
 
-    setEntries((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              status: "converting",
-              progress: item.progress > 0 ? item.progress : 5,
-              error: undefined,
-            }
-          : item,
-      ),
-    );
+      const applyUpdates = (updates: Partial<UploadEntry>, options?: { notify?: boolean }) => {
+        currentEntry = { ...currentEntry, ...updates };
+        setEntries((prev) =>
+          prev.map((item) => (item.id === id ? currentEntry : item)),
+        );
+        if (options?.notify) {
+          emitDocumentChange(currentEntry);
+        }
+      };
 
-    let fileBuffer: ArrayBuffer;
-    try {
-      fileBuffer = await file.arrayBuffer();
-    } catch (fileReadError) {
-      const message =
-        fileReadError instanceof Error
-          ? fileReadError.message
-          : "Unable to read the PDF file.";
-      setEntries((prev) =>
-        prev.map((item) =>
-          item.id === id
-            ? { ...item, status: "error", error: message, progress: 0 }
-            : item,
-        ),
-      );
-      return;
-    }
+      const updateProgress = (progress: number) => {
+        currentEntry = { ...currentEntry, progress };
+        setEntries((prev) =>
+          prev.map((item) => (item.id === id ? currentEntry : item)),
+        );
+      };
 
-    try {
-      const { checksum, hash } = await computeDigestsFromBuffer(fileBuffer);
-      setEntries((prev) =>
-        prev.map((item) =>
-          item.id === id ? { ...item, checksum, hash } : item,
-        ),
-      );
-    } catch (digestError) {
-      console.warn("Failed to compute file digests.", digestError);
-    }
+      const finalizeWithError = (message: string) => {
+        applyUpdates(
+          {
+            status: "error",
+            error: message,
+            progress: 0,
+            transactionStatus: "error",
+            transactionError: message,
+          },
+          { notify: true },
+        );
+      };
 
-    const finalizeSuccess = () => {
-      setEntries((prev) =>
-        prev.map((item) =>
-          item.id === id
-            ? {
-                ...item,
-                status: "success",
-                progress: 100,
-              }
-            : item,
-        ),
-      );
-    };
-
-    try {
-      await axios.post<ArrayBuffer>(CONVERTER_ENDPOINT, (() => {
-        const formData = new FormData();
-        formData.append("file", file);
-        return formData;
-      })(), {
-        headers: { "Content-Type": "multipart/form-data" },
-        responseType: "arraybuffer",
-        onUploadProgress: (event) => {
-          if (!event.total) return;
-          const percent = Math.min(95, Math.round((event.loaded / event.total) * 90));
-          setEntries((prev) =>
-            prev.map((item) =>
-              item.id === id
-                ? { ...item, progress: Math.max(percent, 10) }
-                : item,
-            ),
-          );
+      applyUpdates(
+        {
+          status: "converting",
+          progress: currentEntry.progress > 0 ? currentEntry.progress : 5,
+          error: undefined,
+          transactionError: undefined,
         },
-      });
+        { notify: false },
+      );
 
-      finalizeSuccess();
-    } catch (error) {
-      // When the converter is unavailable, we synthesize the BIN client-side
-      // so downstream flows can still consume the PDF payload.
-      if (axios.isAxiosError(error) && error.response?.status === 404) {
-        finalizeSuccess();
+      let fileBuffer: ArrayBuffer;
+      try {
+        fileBuffer = await file.arrayBuffer();
+      } catch (fileReadError) {
+        const message =
+          fileReadError instanceof Error
+            ? fileReadError.message
+            : "Unable to read the PDF file.";
+        finalizeWithError(message);
         return;
       }
 
-      let message = "Failed to convert PDF to BIN.";
-      if (axios.isAxiosError(error)) {
-        const responseMessage =
-          typeof error.response?.data === "string"
-            ? error.response.data
-            : (error.response?.data as { message?: string })?.message;
-        message = responseMessage ?? error.message;
-      } else if (error instanceof Error) {
-        message = error.message;
+      try {
+        const { checksum, hash } = await computeDigestsFromBuffer(fileBuffer);
+        applyUpdates(
+          {
+            checksum,
+            hash,
+          },
+          { notify: true },
+        );
+      } catch (digestError) {
+        console.warn("Failed to compute file digests.", digestError);
       }
 
-      setEntries((prev) =>
-        prev.map((item) =>
-          item.id === id
-            ? { ...item, status: "error", error: message, progress: 0 }
-            : item,
-        ),
-      );
-    }
-  }, []);
+      const attemptTransactionSignature = async () => {
+        if (!wallet) {
+          applyUpdates({}, { notify: true });
+          return;
+        }
+
+        applyUpdates(
+          {
+            transactionStatus: "pending",
+            transactionError: undefined,
+          },
+          { notify: true },
+        );
+
+        const memoParts = [
+          `Document ${currentEntry.file.name}`,
+          currentEntry.hash ? `hash:${currentEntry.hash}` : null,
+          currentEntry.checksum ? `checksum:${currentEntry.checksum}` : null,
+        ].filter(Boolean);
+        const memo = memoParts.join(" ") || `Document ${currentEntry.id}`;
+
+        try {
+          const { signature } = await sendMemoTransaction({
+            client,
+            wallet,
+            memo,
+          });
+
+          applyUpdates(
+            {
+              transactionSignature: signature,
+              transactionStatus: "confirmed",
+              transactionError: undefined,
+            },
+            { notify: true },
+          );
+        } catch (error) {
+          const rejectionCode = (error as { code?: number })?.code;
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Failed to sign the Solana transaction.";
+          const rejected =
+            rejectionCode === 4001 ||
+            /reject/i.test(message);
+
+          if (rejected) {
+            applyUpdates(
+              {
+                transactionStatus: "cancelled",
+                transactionError: undefined,
+              },
+              { notify: true },
+            );
+            return;
+          }
+
+          applyUpdates(
+            {
+              transactionStatus: "error",
+              transactionError: message,
+            },
+            { notify: true },
+          );
+        }
+      };
+
+      try {
+        await axios.post<ArrayBuffer>(CONVERTER_ENDPOINT, (() => {
+          const formData = new FormData();
+          formData.append("file", file);
+          return formData;
+        })(), {
+          headers: { "Content-Type": "multipart/form-data" },
+          responseType: "arraybuffer",
+          onUploadProgress: (event) => {
+            if (!event.total) return;
+            const percent = Math.min(95, Math.round((event.loaded / event.total) * 90));
+            updateProgress(Math.max(percent, 10));
+          },
+        });
+
+        applyUpdates(
+          {
+            status: "success",
+            progress: 100,
+          },
+          { notify: true },
+        );
+
+        await attemptTransactionSignature();
+      } catch (error) {
+        // When the converter is unavailable, we synthesize the BIN client-side
+        // so downstream flows can still consume the PDF payload.
+        if (axios.isAxiosError(error) && error.response?.status === 404) {
+          applyUpdates(
+            {
+              status: "success",
+              progress: 100,
+            },
+            { notify: true },
+          );
+          await attemptTransactionSignature();
+          return;
+        }
+
+        let message = "Failed to convert PDF to BIN.";
+        if (axios.isAxiosError(error)) {
+          const responseMessage =
+            typeof error.response?.data === "string"
+              ? error.response.data
+              : (error.response?.data as { message?: string })?.message;
+          message = responseMessage ?? error.message;
+        } else if (error instanceof Error) {
+          message = error.message;
+        }
+
+        finalizeWithError(message);
+      }
+    },
+    [client, emitDocumentChange, wallet],
+  );
 
   const stageEntries = useCallback(
     (fileList: FileList | null) => {
@@ -292,15 +423,17 @@ export function FileUpload() {
         progress: 0,
         status: "idle" as UploadStatus,
         uploadedAt: new Date().toISOString(),
+        transactionStatus: "idle" as FileUploadDocumentChange["transactionStatus"],
       }));
 
       setEntries((prev) => [...prev, ...preparedEntries]);
 
       preparedEntries.forEach((newEntry) => {
+        emitDocumentChange(newEntry);
         void convertEntry(newEntry);
       });
     },
-    [convertEntry],
+    [convertEntry, emitDocumentChange],
   );
 
   const onDrop = useCallback(
@@ -468,6 +601,22 @@ export function FileUpload() {
                       <p className="text-xs text-muted-foreground">
                         Conversion complete. The document hash is ready for smart-contract submission.
                       </p>
+                    ) : null}
+
+                    {entry.transactionStatus === "pending" ? (
+                      <p className="text-xs text-muted-foreground">Awaiting wallet confirmation...</p>
+                    ) : null}
+                    {entry.transactionStatus === "confirmed" && entry.transactionSignature ? (
+                      <p className="text-xs text-muted-foreground">
+                        Transaction hash:{" "}
+                        <span className="break-all font-mono">{entry.transactionSignature}</span>
+                      </p>
+                    ) : null}
+                    {entry.transactionStatus === "cancelled" ? (
+                      <p className="text-xs text-muted-foreground">Wallet signing cancelled.</p>
+                    ) : null}
+                    {entry.transactionStatus === "error" && entry.transactionError ? (
+                      <p className="text-xs text-destructive">{entry.transactionError}</p>
                     ) : null}
 
                     {entry.error ? (
