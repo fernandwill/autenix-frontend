@@ -25,8 +25,6 @@ interface UploadEntry {
   uploadedAt: string;
   checksum?: string;
   hash?: string;
-  downloadUrl?: string;
-  convertedFileName?: string;
   error?: string;
 }
 
@@ -48,11 +46,6 @@ const normalizeConverterEndpoint = (value?: string) => {
 const CONVERTER_ENDPOINT = normalizeConverterEndpoint(
   import.meta.env.VITE_PDF_TO_BIN_URL as string | undefined,
 );
-
-const toBinFileName = (fileName: string) => {
-  const withoutExtension = fileName.replace(/\.[^/.]+$/, "");
-  return `${withoutExtension || "document"}.bin`;
-};
 
 // Pretty-print a byte count so users can see file sizes.
 const formatBytes = (bytes: number) => {
@@ -79,7 +72,7 @@ const getStatusLabel = (status: UploadStatus) => {
 const getStatusDescription = (status: UploadStatus) => {
   switch (status) {
     case "success":
-      return "Your document has been notarized and the BIN payload is ready to use.";
+      return "Your document has been notarized and its hash is ready to be published on-chain.";
     case "error":
       return "We were unable to convert this document. Review the status information below.";
     default:
@@ -102,8 +95,6 @@ const createDetailSnapshot = (entry: UploadEntry): DocumentDetailSnapshot => {
     statusDescription,
     checksum: entry.checksum ?? null,
     hash: entry.hash ?? null,
-    downloadUrl: entry.downloadUrl ?? null,
-    convertedFileName: entry.convertedFileName ?? toBinFileName(entry.file.name),
     error: entry.error ?? null,
   };
 };
@@ -146,13 +137,6 @@ const computeDigestsFromBuffer = async (buffer: ArrayBuffer) => {
 export function FileUpload() {
   const [entries, setEntries] = useState<UploadEntry[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const downloadUrlsRef = useRef<Record<string, string>>({});
-
-  useEffect(() => {
-    return () => {
-      Object.values(downloadUrlsRef.current).forEach((url) => URL.revokeObjectURL(url));
-    };
-  }, []);
 
   useEffect(() => {
     if (!DETAIL_STORAGE_AVAILABLE) {
@@ -223,17 +207,7 @@ export function FileUpload() {
       console.warn("Failed to compute file digests.", digestError);
     }
 
-    const finalizeSuccess = (blob: Blob) => {
-      const previousUrl = downloadUrlsRef.current[id];
-      if (previousUrl) {
-        URL.revokeObjectURL(previousUrl);
-      }
-
-      const downloadUrl = URL.createObjectURL(blob);
-      const convertedFileName = toBinFileName(file.name);
-
-      downloadUrlsRef.current[id] = downloadUrl;
-
+    const finalizeSuccess = () => {
       setEntries((prev) =>
         prev.map((item) =>
           item.id === id
@@ -241,8 +215,6 @@ export function FileUpload() {
                 ...item,
                 status: "success",
                 progress: 100,
-                convertedFileName,
-                downloadUrl,
               }
             : item,
         ),
@@ -250,7 +222,7 @@ export function FileUpload() {
     };
 
     try {
-      const response = await axios.post<ArrayBuffer>(CONVERTER_ENDPOINT, (() => {
+      await axios.post<ArrayBuffer>(CONVERTER_ENDPOINT, (() => {
         const formData = new FormData();
         formData.append("file", file);
         return formData;
@@ -270,13 +242,12 @@ export function FileUpload() {
         },
       });
 
-      const blob = new Blob([response.data], { type: "application/octet-stream" });
-      finalizeSuccess(blob);
+      finalizeSuccess();
     } catch (error) {
       // When the converter is unavailable, we synthesize the BIN client-side
       // so downstream flows can still consume the PDF payload.
       if (axios.isAxiosError(error) && error.response?.status === 404) {
-        finalizeSuccess(new Blob([fileBuffer], { type: "application/octet-stream" }));
+        finalizeSuccess();
         return;
       }
 
@@ -352,20 +323,13 @@ export function FileUpload() {
     return "Conversion complete";
   }, [entries]);
 
-  // Removes a single entry and releases any Blob URL tied to it.
+  // Removes a single entry.
   const clearEntry = useCallback((id: string) => {
-    const downloadUrl = downloadUrlsRef.current[id];
-    if (downloadUrl) {
-      URL.revokeObjectURL(downloadUrl);
-      delete downloadUrlsRef.current[id];
-    }
     setEntries((prev) => prev.filter((entry) => entry.id !== id));
   }, []);
 
-  // Clears the entire queue and revokes every generated download URL.
+  // Clears the entire queue.
   const clearAll = useCallback(() => {
-    Object.values(downloadUrlsRef.current).forEach((url) => URL.revokeObjectURL(url));
-    downloadUrlsRef.current = {};
     setEntries([]);
   }, []);
 
@@ -379,16 +343,12 @@ export function FileUpload() {
     [openEntryDetails],
   );
 
-  const stopPropagation = useCallback((event: React.SyntheticEvent) => {
-    event.stopPropagation();
-  }, []);
-
   return (
     <Card className="w-full max-w-2xl">
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl">Convert notarized PDFs to BIN</CardTitle>
+        <CardTitle className="text-2xl">Hash notarized PDFs for on-chain verification</CardTitle>
         <CardDescription>
-          Upload a notarized PDF. Conversion starts immediately and produces a BIN payload ready for
+          Upload a notarized PDF. Conversion starts immediately and preserves the document hash for
           smart-contract ingestion.
         </CardDescription>
       </CardHeader>
@@ -504,18 +464,10 @@ export function FileUpload() {
                       </p>
                     </div>
 
-                    {entry.status === "success" && entry.downloadUrl ? (
-                      <Button
-                        asChild
-                        size="sm"
-                        variant="outline"
-                        className="w-fit"
-                        onClick={stopPropagation}
-                      >
-                        <a href={entry.downloadUrl} download={entry.convertedFileName}>
-                          Download {entry.convertedFileName ?? "file.bin"}
-                        </a>
-                      </Button>
+                    {entry.status === "success" ? (
+                      <p className="text-xs text-muted-foreground">
+                        Conversion complete. The document hash is ready for smart-contract submission.
+                      </p>
                     ) : null}
 
                     {entry.error ? (

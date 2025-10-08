@@ -11,8 +11,6 @@ export type DocumentDetailSnapshot = {
   statusDescription: string;
   checksum: string | null;
   hash: string | null;
-  downloadUrl: string | null;
-  convertedFileName: string | null;
   error: string | null;
 };
 
