@@ -1,14 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import {
-  AlertTriangle,
-  ArrowLeft,
-  CheckCircle2,
-  Clock,
-  Download,
-  FileText,
-  Loader2,
-} from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, FileText, Loader2, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { DocumentDetailSnapshot } from "@/lib/upload-types";
@@ -129,17 +121,10 @@ export function DocumentDetailPage() {
                     </span>
                   ) : null}
 
-                  {snapshot.downloadUrl ? (
-                    <Button asChild className="gap-2">
-                      <a href={snapshot.downloadUrl} download={snapshot.convertedFileName ?? undefined}>
-                        <Download className="h-4 w-4" /> Download BIN
-                      </a>
-                    </Button>
-                  ) : (
-                    <span className="inline-flex items-center gap-2 rounded-full border border-dashed border-slate-300 px-3 py-1 text-sm font-medium text-slate-500">
-                      <Loader2 className="h-4 w-4 animate-spin" /> Preparing download
-                    </span>
-                  )}
+                  <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
+                    <ShieldCheck className="h-4 w-4" />
+                    Download disabled · Only the document hash is retained for on-chain verification
+                  </span>
                 </div>
 
                 <p className="max-w-xl text-sm text-slate-600">{snapshot.statusDescription}</p>
