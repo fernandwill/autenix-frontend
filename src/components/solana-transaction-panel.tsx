@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, ExternalLink, Loader2, SendHorizonal, Wallet } from "lucide-react";
 
+import type { Address } from "gill";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -75,7 +76,7 @@ export function SolanaTransactionPanel() {
       const { explorerUrl: url, signature: txSignature } = await sendMemoTransaction({
         client,
         wallet: {
-          address,
+          address: address as Address<string>,
           signTransaction: provider.signTransaction.bind(provider),
         },
         memo,

@@ -6,22 +6,19 @@ const appName = "Notarization Portal";
 const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID;
 
 const connectors = [
-  injected({
-    shimDisconnect: true,
-  }),
+  injected(),
   coinbaseWallet({
     appName,
   }),
-];
-
-if (projectId) {
-  connectors.push(
-    walletConnect({
-      projectId,
-      showQrModal: true,
-    }),
-  );
-}
+  ...(projectId
+    ? [
+        walletConnect({
+          projectId,
+          showQrModal: true,
+        }),
+      ]
+    : []),
+] as const;
 
 export const wagmiConfig = createConfig({
   chains: [mainnet, base, sepolia],

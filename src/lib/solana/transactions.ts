@@ -1,15 +1,22 @@
 import {
   createNoopSigner,
   createTransaction,
-  getAddMemoInstruction,
   getExplorerLink,
+  type Address,
   type Commitment,
   type SolanaClient,
   type Transaction,
 } from "gill";
+import { getAddMemoInstruction } from "gill/programs";
+import {
+  assertIsFullySignedTransaction,
+  compileTransaction,
+  type FullySignedTransaction,
+  type TransactionWithBlockhashLifetime,
+} from "@solana/transactions";
 
 export type GillWalletAdapter = {
-  address: string;
+  address: Address<string>;
   signTransaction: (transaction: Transaction) => Promise<Transaction>;
 };
 
@@ -40,7 +47,7 @@ export async function sendMemoTransaction({
 
   const { value: latestBlockhash } = await client.rpc.getLatestBlockhash().send();
 
-  const transaction = createTransaction({
+  const transactionMessage = createTransaction({
     version: "legacy",
     feePayer: createNoopSigner(wallet.address),
     instructions: [
@@ -53,9 +60,14 @@ export async function sendMemoTransaction({
     computeUnitPrice: 1_000,
   });
 
-  const compiled = transaction.compileToLegacyTransaction();
-  const signedTransaction = await wallet.signTransaction(compiled);
-  const signature = await client.sendAndConfirmTransaction(signedTransaction, {
+  const compiledTransaction = compileTransaction(transactionMessage);
+  const signedTransaction = await wallet.signTransaction(compiledTransaction);
+  assertIsFullySignedTransaction(signedTransaction);
+  const sendableTransaction: FullySignedTransaction & TransactionWithBlockhashLifetime = {
+    ...signedTransaction,
+    lifetimeConstraint: compiledTransaction.lifetimeConstraint,
+  };
+  const signature = await client.sendAndConfirmTransaction(sendableTransaction, {
     commitment,
   });
 
