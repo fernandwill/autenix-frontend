@@ -255,6 +255,11 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
         { notify: false },
       );
 
+      if (!wallet) {
+        finalizeWithError("Please connect your wallet.");
+        return;
+      }
+
       let fileBuffer: ArrayBuffer;
       try {
         fileBuffer = await file.arrayBuffer();
@@ -281,11 +286,6 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
       }
 
       const attemptTransactionSignature = async () => {
-        if (!wallet) {
-          applyUpdates({}, { notify: true });
-          return;
-        }
-
         applyUpdates(
           {
             transactionStatus: "pending",
