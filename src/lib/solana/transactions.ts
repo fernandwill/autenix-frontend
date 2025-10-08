@@ -5,19 +5,28 @@ import {
   type Address,
   type Commitment,
   type SolanaClient,
-  type Transaction,
+  type Transaction as GillTransaction,
 } from "gill";
 import { getAddMemoInstruction } from "gill/programs";
 import {
   assertIsFullySignedTransaction,
   compileTransaction,
   type FullySignedTransaction,
+  getTransactionDecoder,
   type TransactionWithBlockhashLifetime,
 } from "@solana/transactions";
 
+type WalletStandardTransaction = GillTransaction & {
+  version: "legacy" | number;
+  serialize: () => Uint8Array;
+};
+type WalletSignedTransaction = GillTransaction & {
+  serialize: () => Uint8Array;
+};
+
 export type GillWalletAdapter = {
   address: Address<string>;
-  signTransaction: (transaction: Transaction) => Promise<Transaction>;
+  signTransaction: (transaction: GillTransaction) => Promise<GillTransaction>;
 };
 
 export type SendMemoTransactionConfig = {
@@ -63,8 +72,26 @@ export async function sendMemoTransaction({
 
   // Compile a transaction message into the wire-ready transaction format.
   const compiledTransaction = compileTransaction(transactionMessage);
-  const signedTransaction = await wallet.signTransaction(compiledTransaction);
-  assertIsFullySignedTransaction(signedTransaction);
+  const walletReadyTransaction: WalletStandardTransaction = {
+    ...compiledTransaction,
+    version: transactionMessage.version,
+    serialize: () => new Uint8Array(compiledTransaction.messageBytes),
+  };
+
+  const walletSignedTransaction = (await wallet.signTransaction(
+    walletReadyTransaction,
+  )) as WalletSignedTransaction;
+
+  if (typeof walletSignedTransaction.serialize !== "function") {
+    throw new Error("Wallet returned a transaction without a serialize method.");
+  }
+
+  const serializedTransaction = walletSignedTransaction.serialize();
+  const decodedTransaction = getTransactionDecoder().decode(serializedTransaction);
+
+  assertIsFullySignedTransaction(decodedTransaction);
+  const signedTransaction = decodedTransaction;
+
   // Vite build expects Solana lifetime metadata, so we merge it back in before sending.
   const sendableTransaction: FullySignedTransaction & TransactionWithBlockhashLifetime = {
     ...signedTransaction,
