@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { LogOut, Wallet } from "lucide-react";
 import { BaseError } from "viem";
-import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { ConnectorNotFoundError, useAccount, useConnect, useDisconnect } from "wagmi";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -37,6 +37,13 @@ export function ConnectWalletButton({ className }: { className?: string }) {
     setPreferredConnectorId(null);
   }, []);
 
+  useEffect(() => {
+    if (!(error instanceof ConnectorNotFoundError)) return;
+
+    clearPreferredConnector();
+    setLocalError("No wallet connector available. Install MetaMask or another browser wallet.");
+  }, [clearPreferredConnector, error]);
+
   const handleConnect = useCallback(async () => {
     setLocalError(null);
 
@@ -58,7 +65,10 @@ export function ConnectWalletButton({ className }: { className?: string }) {
       }
       setPreferredConnectorId(preferredConnector.id);
     } catch (connectError) {
-      if (connectError instanceof BaseError) {
+      if (connectError instanceof ConnectorNotFoundError) {
+        clearPreferredConnector();
+        setLocalError("No wallet connector available. Install MetaMask or another browser wallet.");
+      } else if (connectError instanceof BaseError) {
         setLocalError(connectError.shortMessage || connectError.message);
       } else if (connectError instanceof Error) {
         setLocalError(connectError.message);
@@ -66,7 +76,7 @@ export function ConnectWalletButton({ className }: { className?: string }) {
         setLocalError("Failed to connect to wallet.");
       }
     }
-  }, [availableConnectors, connectAsync, connectors, preferredConnectorId]);
+  }, [availableConnectors, clearPreferredConnector, connectAsync, connectors, preferredConnectorId]);
 
   const handleDisconnect = useCallback(() => {
     clearPreferredConnector();
