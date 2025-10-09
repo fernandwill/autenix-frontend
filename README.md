@@ -2,7 +2,7 @@
 
 This project is a Vite powered React application used to explore notarization workflows. It now includes:
 
-- An improved EVM wallet connection flow powered by **wagmi** with smarter connector selection and persistence.
+- A streamlined document upload flow with checksum and hash previews.
 - A Solana transaction demo panel that relies on the **Gill SDK** to craft and submit memo transactions.
 
 ## Development

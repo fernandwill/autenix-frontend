@@ -58,10 +58,15 @@ const DETAIL_STORAGE_AVAILABLE = typeof window !== "undefined" && "localStorage"
 const normalizeConverterEndpoint = (value?: string) => {
   if (!value) return "/api/convert/pdf-to-bin";
   const trimmed = value.trim();
-  if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith("/")) {
-    return trimmed;
+
+  // Recover from accidental `http:localhost` (missing slashes) style values.
+  const sanitized = trimmed.replace(/^(https?):(?!\/)/i, (_, protocol: string) => `${protocol}://`);
+
+  if (/^https?:\/\//i.test(sanitized) || sanitized.startsWith("/")) {
+    return sanitized;
   }
-  return `/${trimmed.replace(/^\/+/, "")}`;
+
+  return `/${sanitized.replace(/^\/+/, "")}`;
 };
 
 const CONVERTER_ENDPOINT = normalizeConverterEndpoint(

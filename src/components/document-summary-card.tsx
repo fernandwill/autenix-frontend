@@ -5,52 +5,59 @@ interface DocumentSummaryCardProps {
   document: FileUploadDocumentChange | null;
 }
 
-const formatTimestamp = (value: string | null | undefined) => {
-  if (!value) return "—";
+const FALLBACK = "N/A";
+
+const formatTimestamp = (value?: string | null) => {
+  if (!value) return FALLBACK;
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? FALLBACK : date.toLocaleString();
 };
 
-const formatChecksum = (value: string | null | undefined) => value ?? "—";
+const formatChecksum = (value?: string | null) => value ?? FALLBACK;
 
 const formatTransactionHash = (document: FileUploadDocumentChange | null) => {
-  if (!document) return "—";
+  if (!document) return FALLBACK;
 
-  if (document.transactionStatus === "pending") {
-    return "Awaiting signature";
+  switch (document.transactionStatus) {
+    case "pending":
+      return "Awaiting signature";
+    case "cancelled":
+      return "Signature cancelled";
+    case "error":
+      return document.error ?? "Signing failed";
+    default:
+      return document.transactionHash ?? FALLBACK;
   }
-
-  if (document.transactionStatus === "cancelled") {
-    return "Signature cancelled";
-  }
-
-  if (document.transactionStatus === "error") {
-    return document.error ?? "Signing failed";
-  }
-
-  return document.transactionHash ?? "—";
 };
 
 export function DocumentSummaryCard({ document }: DocumentSummaryCardProps) {
+  const items = [
+    {
+      label: "Timestamp",
+      value: formatTimestamp(document?.timestamp),
+    },
+    {
+      label: "Checksum",
+      value: formatChecksum(document?.checksum),
+    },
+    {
+      label: "Transaction Hash",
+      value: formatTransactionHash(document),
+    },
+  ];
+
   return (
     <Card className="w-full max-w-xl">
       <CardHeader>
         <CardTitle className="text-lg font-semibold">My Document</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
-        <div>
-          <p className="text-xs font-medium uppercase text-muted-foreground">Timestamp</p>
-          <p className="mt-1 font-mono text-foreground">{formatTimestamp(document?.timestamp)}</p>
-        </div>
-        <div>
-          <p className="text-xs font-medium uppercase text-muted-foreground">Checksum</p>
-          <p className="mt-1 break-all font-mono text-foreground">{formatChecksum(document?.checksum)}</p>
-        </div>
-        <div>
-          <p className="text-xs font-medium uppercase text-muted-foreground">Transaction Hash</p>
-          <p className="mt-1 break-all font-mono text-foreground">{formatTransactionHash(document)}</p>
-        </div>
+        {items.map(({ label, value }) => (
+          <div key={label}>
+            <p className="text-xs font-medium uppercase text-muted-foreground">{label}</p>
+            <p className="mt-1 break-all font-mono text-foreground">{value}</p>
+          </div>
+        ))}
       </CardContent>
     </Card>
   );

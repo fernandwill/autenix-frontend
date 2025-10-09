@@ -1,0 +1,4 @@
+1. Cleanup unused code (wagmi.ts) - done
+2. No need to call localhost:5173/api/convert/pdf-to-bin/
+3. Code too long (shorten) "Please refactor code to make it shorter while maintaining functionality" - done
+4. Push after done.
