@@ -1,5 +1,3 @@
-import type { Transaction } from "gill";
-
 type PhantomPublicKey = {
   toBase58(): string;
 };
@@ -17,8 +15,8 @@ export interface SolanaWindowProvider {
   connect: (options?: { onlyIfTrusted?: boolean }) => Promise<PhantomConnectResponse>;
   disconnect?: () => Promise<void>;
   publicKey?: PhantomPublicKey;
-  signTransaction?: (transaction: Transaction) => Promise<Transaction | Uint8Array>;
-  signAllTransactions?: (transactions: Transaction[]) => Promise<Transaction[] | Uint8Array[]>;
+  signTransaction?: (transaction: unknown) => Promise<unknown>;
+  signAllTransactions?: (transactions: unknown[]) => Promise<unknown>;
   on?: (event: PhantomEvent, handler: PhantomEventHandler) => void;
   off?: (event: PhantomEvent, handler: PhantomEventHandler) => void;
 }

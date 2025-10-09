@@ -9,7 +9,8 @@ import {
   type ReactNode,
 } from "react";
 
-import { transactionFromBase64, transactionToBase64 } from "gill";
+import { assertIsFullySignedTransaction, transactionFromBase64, transactionToBase64, type Transaction as GillTransaction } from "gill";
+import { getBase58Codec } from "@solana/codecs-strings";
 
 import type { SolanaWindowProvider } from "@/types/solana";
 
@@ -24,6 +25,7 @@ interface SolanaWalletContextValue {
 }
 
 const SolanaWalletContext = createContext<SolanaWalletContextValue | undefined>(undefined);
+const base58Codec = getBase58Codec();
 
 export function SolanaWalletProvider({ children }: { children: ReactNode }) {
   const [provider, setProvider] = useState<SolanaWindowProvider | null>(null);
@@ -91,13 +93,26 @@ export function SolanaWalletProvider({ children }: { children: ReactNode }) {
 
     return async (transactionBase64: string) => {
       const transaction = transactionFromBase64(transactionBase64);
-      const signed = await provider.signTransaction!(transaction);
+      const { legacyTransaction, getSignedTransaction } = createLegacyTransactionAdapter(transaction);
+
+      const signed = await provider.signTransaction!(legacyTransaction as unknown);
 
       if (signed instanceof Uint8Array) {
         return uint8ArrayToBase64(signed);
       }
 
-      return transactionToBase64(signed);
+      if (typeof signed === "object" && signed !== null) {
+        const maybeSerialize = (signed as { serialize?: () => Uint8Array | number[] }).serialize;
+        if (typeof maybeSerialize === "function") {
+          const serialized = maybeSerialize.call(signed);
+          const bytes = serialized instanceof Uint8Array ? serialized : new Uint8Array(serialized);
+          return uint8ArrayToBase64(bytes);
+        }
+      }
+
+      const signedTransaction = getSignedTransaction();
+      assertIsFullySignedTransaction(signedTransaction);
+      return transactionToBase64(signedTransaction);
     };
   }, [provider]);
 
@@ -139,4 +154,114 @@ function uint8ArrayToBase64(bytes: Uint8Array) {
     binary += String.fromCharCode(byte);
   });
   return btoa(binary);
+}
+
+function base64ToUint8Array(base64: string): Uint8Array {
+  if (typeof globalThis.Buffer !== "undefined") {
+    return new Uint8Array(globalThis.Buffer.from(base64, "base64"));
+  }
+
+  if (typeof atob !== "function") {
+    throw new Error("Unable to decode base64 transaction payload in this environment.");
+  }
+
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+type LegacyTransactionAdapter = {
+  serialize: (options?: { requireAllSignatures?: boolean; verifySignatures?: boolean }) => Uint8Array;
+  serializeMessage: () => Uint8Array;
+  addSignature: (publicKey: { toBase58?: () => string; toBytes?: () => Uint8Array }, signature: Uint8Array | number[]) => void;
+  signatures: Array<{
+    publicKey: { toBase58: () => string; toBytes: () => Uint8Array };
+    signature: Uint8Array | null;
+  }>;
+  feePayer?: { toBase58: () => string; toBytes: () => Uint8Array };
+};
+
+function createLegacyTransactionAdapter(transaction: GillTransaction) {
+  const messageBytes = new Uint8Array(transaction.messageBytes);
+  const signatureEntries = new Map<string, Uint8Array | null>(
+    Object.entries(transaction.signatures ?? {}).map(([address, signature]) => [
+      address,
+      signature ? new Uint8Array(signature) : null,
+    ]),
+  );
+
+  const publicKeyCache = new Map<string, { toBase58: () => string; toBytes: () => Uint8Array }>();
+
+  const getPublicKeyShim = (address: string) => {
+    if (publicKeyCache.has(address)) {
+      return publicKeyCache.get(address)!;
+    }
+    const shim = {
+      toBase58: () => address,
+      toBytes: () => new Uint8Array(base58Codec.encode(address)),
+    };
+    publicKeyCache.set(address, shim);
+    return shim;
+  };
+
+  const normalizeSignature = (signature: Uint8Array | number[]) =>
+    signature instanceof Uint8Array ? signature : new Uint8Array(signature);
+
+  const normalizePublicKey = (publicKey: { toBase58?: () => string; toBytes?: () => Uint8Array }) => {
+    if (typeof publicKey?.toBase58 === "function") {
+      return publicKey.toBase58();
+    }
+    if (typeof publicKey?.toBytes === "function") {
+      return base58Codec.decode(publicKey.toBytes());
+    }
+    throw new Error("Unable to normalize public key returned by wallet extension.");
+  };
+
+  const toLegacySignaturesArray = () =>
+    Array.from(signatureEntries.entries()).map(([address, signature]) => ({
+      publicKey: getPublicKeyShim(address),
+      signature,
+    }));
+
+  const legacyTransaction: LegacyTransactionAdapter = {
+    serializeMessage: () => messageBytes,
+    serialize: () => serializeLegacyTransaction(),
+    addSignature: (publicKey, signature) => {
+      const address = normalizePublicKey(publicKey);
+      signatureEntries.set(address, normalizeSignature(signature));
+    },
+    get signatures() {
+      return toLegacySignaturesArray();
+    },
+    set signatures(value) {
+      signatureEntries.clear();
+      value.forEach(({ publicKey, signature }) => {
+        const address = normalizePublicKey(publicKey);
+        signatureEntries.set(address, signature ? normalizeSignature(signature) : null);
+      });
+    },
+    feePayer: (() => {
+      const first = signatureEntries.keys().next().value as string | undefined;
+      return first ? getPublicKeyShim(first) : undefined;
+    })(),
+  };
+
+  const getSignedTransaction = (): GillTransaction => ({
+    messageBytes: transaction.messageBytes,
+    signatures: Object.fromEntries(signatureEntries) as GillTransaction["signatures"],
+  });
+
+  const serializeLegacyTransaction = () => {
+    const signedTransaction = getSignedTransaction();
+    const base64 = transactionToBase64(signedTransaction);
+    return base64ToUint8Array(base64);
+  };
+
+  return {
+    legacyTransaction,
+    getSignedTransaction,
+  };
 }

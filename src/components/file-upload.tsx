@@ -51,6 +51,10 @@ interface UploadEntry {
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const ACCEPTED_TYPES = ["application/pdf"] as const;
 
+const isPdfFile = (file: File) =>
+  ACCEPTED_TYPES.includes(file.type as (typeof ACCEPTED_TYPES)[number]) ||
+  file.name.toLowerCase().endsWith(".pdf");
+
 const DETAIL_STORAGE_AVAILABLE = typeof window !== "undefined" && "localStorage" in window;
 
 // Pretty-print a byte count so users can see file sizes.
@@ -245,6 +249,11 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
         return;
       }
 
+      if (!isPdfFile(file)) {
+        finalizeWithError("Unsupported file type. Only PDF documents are supported.");
+        return;
+      }
+
       let fileBuffer: ArrayBuffer;
       try {
         fileBuffer = await file.arrayBuffer();
@@ -351,9 +360,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
       if (!fileList?.length) return;
 
       const accepted = Array.from(fileList).filter((file) => {
-        const typeAccepted = ACCEPTED_TYPES.includes(
-          file.type as (typeof ACCEPTED_TYPES)[number],
-        );
+        const typeAccepted = isPdfFile(file);
         const sizeAccepted = file.size <= MAX_FILE_SIZE;
         return typeAccepted && sizeAccepted;
       });
