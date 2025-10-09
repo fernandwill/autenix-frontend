@@ -1,26 +1,22 @@
 import {
+  assertIsFullySignedTransaction,
+  compileTransaction,
   createNoopSigner,
   createTransaction,
   getExplorerLink,
+  transactionFromBase64,
+  transactionToBase64,
   type Address,
   type Commitment,
+  type FullySignedTransaction,
   type SolanaClient,
+  type TransactionWithBlockhashLifetime,
 } from "gill";
 import { getAddMemoInstruction } from "gill/programs";
-import {
-  assertIsFullySignedTransaction,
-  compileTransaction,
-  type FullySignedTransaction,
-  getTransactionDecoder,
-  type TransactionWithBlockhashLifetime,
-} from "@solana/transactions";
-import { VersionedMessage, VersionedTransaction } from "@solana/web3.js";
 
 export type GillWalletAdapter = {
   address: Address<string>;
-  signTransaction: (
-    transaction: VersionedTransaction,
-  ) => Promise<VersionedTransaction>;
+  signTransaction: (transactionBase64: string) => Promise<string>;
 };
 
 export type SendMemoTransactionConfig = {
@@ -66,19 +62,11 @@ export async function sendMemoTransaction({
 
   // Compile a transaction message into the wire-ready transaction format.
   const compiledTransaction = compileTransaction(transactionMessage);
-  const walletReadyTransaction = new VersionedTransaction(
-    VersionedMessage.deserialize(compiledTransaction.messageBytes),
-  );
+  const transactionBase64 = transactionToBase64(compiledTransaction);
+  const signedTransactionBase64 = await wallet.signTransaction(transactionBase64);
+  const signedTransaction = transactionFromBase64(signedTransactionBase64);
 
-  const walletSignedTransaction = await wallet.signTransaction(
-    walletReadyTransaction,
-  );
-
-  const serializedTransaction = walletSignedTransaction.serialize();
-  const decodedTransaction = getTransactionDecoder().decode(serializedTransaction);
-
-  assertIsFullySignedTransaction(decodedTransaction);
-  const signedTransaction = decodedTransaction;
+  assertIsFullySignedTransaction(signedTransaction);
 
   // Vite build expects Solana lifetime metadata, so we merge it back in before sending.
   const sendableTransaction: FullySignedTransaction & TransactionWithBlockhashLifetime = {
