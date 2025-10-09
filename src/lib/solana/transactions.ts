@@ -73,17 +73,21 @@ export async function sendMemoTransaction({
     ...signedTransaction,
     lifetimeConstraint: compiledTransaction.lifetimeConstraint,
   };
-  const signature = await client.sendAndConfirmTransaction(sendableTransaction, {
-    commitment,
-  });
+  try {
+    const signature = await client.sendAndConfirmTransaction(sendableTransaction, {
+      commitment,
+    });
 
-  return {
-    signature,
-    explorerUrl: getExplorerLink({
-      cluster: inferClusterFromUrl(client.urlOrMoniker),
-      transaction: signature,
-    }),
-  };
+    return {
+      signature,
+      explorerUrl: getExplorerLink({
+        cluster: inferClusterFromUrl(client.urlOrMoniker),
+        transaction: signature,
+      }),
+    };
+  } catch (error) {
+    throw enhanceSendError(error);
+  }
 }
 
 function inferClusterFromUrl(
@@ -97,4 +101,54 @@ function inferClusterFromUrl(
   if (normalized.includes("mainnet")) return "mainnet";
 
   return "mainnet-beta";
+}
+
+function enhanceSendError(error: unknown): Error {
+  const message = error instanceof Error ? error.message : String(error);
+  const isSimulationFailure = /transaction simulation failed/i.test(message);
+  if (!isSimulationFailure) {
+    return error instanceof Error ? error : new Error(message);
+  }
+
+  const logs = extractSimulationLogs(error);
+  const guidance =
+    "Transaction simulation failed. Ensure your wallet has enough SOL on the selected network and try again.";
+  const detailedMessage = logs.length
+    ? `${guidance}\nSimulation logs:\n${logs.join("\n")}`
+    : guidance;
+
+  const enhancedError = new Error(detailedMessage);
+  if (error instanceof Error) {
+    (enhancedError as { cause?: unknown }).cause = error;
+  }
+  return enhancedError;
+}
+
+function extractSimulationLogs(error: unknown): string[] {
+  if (!error || typeof error !== "object") {
+    return [];
+  }
+
+  const logsCandidate = (error as { logs?: unknown }).logs;
+  if (Array.isArray(logsCandidate)) {
+    return logsCandidate.filter((log): log is string => typeof log === "string");
+  }
+
+  const causeCandidate = (error as { cause?: unknown }).cause;
+  if (causeCandidate) {
+    const logs = extractSimulationLogs(causeCandidate);
+    if (logs.length) {
+      return logs;
+    }
+  }
+
+  const valueCandidate = (error as { value?: unknown }).value;
+  if (valueCandidate && typeof valueCandidate === "object") {
+    const errCandidate = (valueCandidate as { err?: unknown; logs?: unknown }).logs;
+    if (Array.isArray(errCandidate)) {
+      return errCandidate.filter((log): log is string => typeof log === "string");
+    }
+  }
+
+  return [];
 }
