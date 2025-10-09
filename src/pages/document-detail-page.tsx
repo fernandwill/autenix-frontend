@@ -103,7 +103,7 @@ export function DocumentDetailPage() {
 
                   <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
                     <ShieldCheck className="h-4 w-4" />
-                    Download disabled · Only the document hash is retained for on-chain verification
+                    Only the document hash is retained for on-chain verification
                   </span>
                 </div>
 
