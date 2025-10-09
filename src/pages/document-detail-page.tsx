@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, FileText, Loader2, ShieldCheck } from "lucide-react";
 
@@ -7,47 +7,35 @@ import type { DocumentDetailSnapshot } from "@/lib/upload-types";
 import { buildDetailStorageKey } from "@/lib/upload-types";
 
 const loadSnapshot = (id: string): DocumentDetailSnapshot | null => {
-  if (typeof window === "undefined") {
-    return null;
-  }
+  if (typeof window === "undefined") return null;
 
   try {
     const stored = window.localStorage.getItem(buildDetailStorageKey(id));
-    if (!stored) {
-      return null;
-    }
-
-    return JSON.parse(stored) as DocumentDetailSnapshot;
+    return stored ? (JSON.parse(stored) as DocumentDetailSnapshot) : null;
   } catch (error) {
     console.warn("Unable to read stored document snapshot.", error);
     return null;
   }
 };
 
-const getStatusVisuals = (snapshot: DocumentDetailSnapshot) => {
-  switch (snapshot.status) {
-    case "success":
-      return {
-        icon: CheckCircle2,
-        badgeClass: "border-emerald-200 bg-emerald-100 text-emerald-700",
-      } as const;
-    case "error":
-      return {
-        icon: AlertTriangle,
-        badgeClass: "border-rose-200 bg-rose-100 text-rose-700",
-      } as const;
-    case "converting":
-      return {
-        icon: Loader2,
-        badgeClass: "border-sky-200 bg-sky-100 text-sky-700",
-      } as const;
-    default:
-      return {
-        icon: Clock,
-        badgeClass: "border-slate-200 bg-slate-100 text-slate-600",
-      } as const;
-  }
-};
+const STATUS_VISUALS = {
+  success: {
+    icon: CheckCircle2,
+    badgeClass: "border-emerald-200 bg-emerald-100 text-emerald-700",
+  },
+  error: {
+    icon: AlertTriangle,
+    badgeClass: "border-rose-200 bg-rose-100 text-rose-700",
+  },
+  converting: {
+    icon: Loader2,
+    badgeClass: "border-sky-200 bg-sky-100 text-sky-700",
+  },
+  default: {
+    icon: Clock,
+    badgeClass: "border-slate-200 bg-slate-100 text-slate-600",
+  },
+} as const;
 
 export function DocumentDetailPage() {
   const { entryId } = useParams<{ entryId: string }>();
@@ -56,30 +44,22 @@ export function DocumentDetailPage() {
   );
 
   useEffect(() => {
-    if (!entryId || typeof window === "undefined") {
-      return;
-    }
+    if (!entryId || typeof window === "undefined") return;
 
-    const refreshSnapshot = () => {
-      setSnapshot(loadSnapshot(entryId));
+    const key = buildDetailStorageKey(entryId);
+    const refresh = () => setSnapshot(loadSnapshot(entryId));
+    const handleStorage = ({ key: changedKey }: StorageEvent) => {
+      if (changedKey === key) refresh();
     };
 
-    refreshSnapshot();
-
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key === buildDetailStorageKey(entryId)) {
-        refreshSnapshot();
-      }
-    };
-
+    refresh();
     window.addEventListener("storage", handleStorage);
-
-    return () => {
-      window.removeEventListener("storage", handleStorage);
-    };
+    return () => window.removeEventListener("storage", handleStorage);
   }, [entryId]);
 
-  const statusVisuals = useMemo(() => (snapshot ? getStatusVisuals(snapshot) : null), [snapshot]);
+  const statusVisuals = snapshot
+    ? STATUS_VISUALS[snapshot.status as keyof typeof STATUS_VISUALS] ?? STATUS_VISUALS.default
+    : null;
   const statusIconClass = snapshot?.status === "converting" ? "h-4 w-4 animate-spin" : "h-4 w-4";
 
   return (
