@@ -51,6 +51,7 @@ export async function sendMemoTransaction({
     version: "legacy",
     feePayer: createNoopSigner(wallet.address),
     instructions: [
+      // TODO: Swap this helper for your program's instruction builder (using your program ID) when ready.
       getAddMemoInstruction({
         memo,
       }),
