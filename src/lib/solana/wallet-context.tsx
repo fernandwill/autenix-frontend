@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { VersionedTransaction } from "@solana/web3.js";
+import { transactionFromBase64, transactionToBase64 } from "gill";
 
 import type { SolanaWindowProvider } from "@/types/solana";
 
@@ -90,11 +90,14 @@ export function SolanaWalletProvider({ children }: { children: ReactNode }) {
     if (!provider?.signTransaction) return null;
 
     return async (transactionBase64: string) => {
-      const serializedTransaction = base64ToUint8Array(transactionBase64);
-      const transaction = VersionedTransaction.deserialize(serializedTransaction);
+      const transaction = transactionFromBase64(transactionBase64);
       const signed = await provider.signTransaction!(transaction);
-      const signedBytes = signed instanceof Uint8Array ? signed : signed.serialize();
-      return uint8ArrayToBase64(signedBytes);
+
+      if (signed instanceof Uint8Array) {
+        return uint8ArrayToBase64(signed);
+      }
+
+      return transactionToBase64(signed);
     };
   }, [provider]);
 
@@ -120,23 +123,6 @@ export function useSolanaWallet() {
     throw new Error("useSolanaWallet must be used within a SolanaWalletProvider");
   }
   return context;
-}
-
-function base64ToUint8Array(base64: string) {
-  if (typeof globalThis.Buffer !== "undefined") {
-    return Uint8Array.from(globalThis.Buffer.from(base64, "base64"));
-  }
-
-  if (typeof atob !== "function") {
-    throw new Error("Unable to decode base64 transaction payload in this environment.");
-  }
-
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return bytes;
 }
 
 function uint8ArrayToBase64(bytes: Uint8Array) {
