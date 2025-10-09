@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import axios from "axios";
 import type { Address } from "gill";
 import { CheckCircle2, FileText, Loader2, Upload, X } from "lucide-react";
 import { nanoid } from "nanoid";
@@ -53,25 +52,6 @@ const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const ACCEPTED_TYPES = ["application/pdf"] as const;
 
 const DETAIL_STORAGE_AVAILABLE = typeof window !== "undefined" && "localStorage" in window;
-
-// Normalizes whatever the env provides into a usable request path.
-const normalizeConverterEndpoint = (value?: string) => {
-  if (!value) return "/api/convert/pdf-to-bin";
-  const trimmed = value.trim();
-
-  // Recover from accidental `http:localhost` (missing slashes) style values.
-  const sanitized = trimmed.replace(/^(https?):(?!\/)/i, (_, protocol: string) => `${protocol}://`);
-
-  if (/^https?:\/\//i.test(sanitized) || sanitized.startsWith("/")) {
-    return sanitized;
-  }
-
-  return `/${sanitized.replace(/^\/+/, "")}`;
-};
-
-const CONVERTER_ENDPOINT = normalizeConverterEndpoint(
-  import.meta.env.VITE_PDF_TO_BIN_URL as string | undefined,
-);
 
 // Pretty-print a byte count so users can see file sizes.
 const formatBytes = (bytes: number) => {
@@ -352,58 +332,16 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
         }
       };
 
-      try {
-        await axios.post<ArrayBuffer>(CONVERTER_ENDPOINT, (() => {
-          const formData = new FormData();
-          formData.append("file", file);
-          return formData;
-        })(), {
-          headers: { "Content-Type": "multipart/form-data" },
-          responseType: "arraybuffer",
-          onUploadProgress: (event) => {
-            if (!event.total) return;
-            const percent = Math.min(95, Math.round((event.loaded / event.total) * 90));
-            updateProgress(Math.max(percent, 10));
-          },
-        });
+      updateProgress(100);
+      applyUpdates(
+        {
+          status: "success",
+          progress: 100,
+        },
+        { notify: true },
+      );
 
-        applyUpdates(
-          {
-            status: "success",
-            progress: 100,
-          },
-          { notify: true },
-        );
-
-        await attemptTransactionSignature();
-      } catch (error) {
-        // When the converter is unavailable, we synthesize the BIN client-side
-        // so downstream flows can still consume the PDF payload.
-        if (axios.isAxiosError(error) && error.response?.status === 404) {
-          applyUpdates(
-            {
-              status: "success",
-              progress: 100,
-            },
-            { notify: true },
-          );
-          await attemptTransactionSignature();
-          return;
-        }
-
-        let message = "Failed to convert PDF to BIN.";
-        if (axios.isAxiosError(error)) {
-          const responseMessage =
-            typeof error.response?.data === "string"
-              ? error.response.data
-              : (error.response?.data as { message?: string })?.message;
-          message = responseMessage ?? error.message;
-        } else if (error instanceof Error) {
-          message = error.message;
-        }
-
-        finalizeWithError(message);
-      }
+      await attemptTransactionSignature();
     },
     [client, emitDocumentChange, wallet],
   );
