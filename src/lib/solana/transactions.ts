@@ -5,7 +5,6 @@ import {
   type Address,
   type Commitment,
   type SolanaClient,
-  type Transaction as GillTransaction,
 } from "gill";
 import { getAddMemoInstruction } from "gill/programs";
 import {
@@ -15,18 +14,13 @@ import {
   getTransactionDecoder,
   type TransactionWithBlockhashLifetime,
 } from "@solana/transactions";
-
-type WalletStandardTransaction = GillTransaction & {
-  version: "legacy" | number;
-  serialize: () => Uint8Array;
-};
-type WalletSignedTransaction = GillTransaction & {
-  serialize: () => Uint8Array;
-};
+import { VersionedMessage, VersionedTransaction } from "@solana/web3.js";
 
 export type GillWalletAdapter = {
   address: Address<string>;
-  signTransaction: (transaction: GillTransaction) => Promise<GillTransaction>;
+  signTransaction: (
+    transaction: VersionedTransaction,
+  ) => Promise<VersionedTransaction>;
 };
 
 export type SendMemoTransactionConfig = {
@@ -72,19 +66,13 @@ export async function sendMemoTransaction({
 
   // Compile a transaction message into the wire-ready transaction format.
   const compiledTransaction = compileTransaction(transactionMessage);
-  const walletReadyTransaction: WalletStandardTransaction = {
-    ...compiledTransaction,
-    version: transactionMessage.version,
-    serialize: () => new Uint8Array(compiledTransaction.messageBytes),
-  };
+  const walletReadyTransaction = new VersionedTransaction(
+    VersionedMessage.deserialize(compiledTransaction.messageBytes),
+  );
 
-  const walletSignedTransaction = (await wallet.signTransaction(
+  const walletSignedTransaction = await wallet.signTransaction(
     walletReadyTransaction,
-  )) as WalletSignedTransaction;
-
-  if (typeof walletSignedTransaction.serialize !== "function") {
-    throw new Error("Wallet returned a transaction without a serialize method.");
-  }
+  );
 
   const serializedTransaction = walletSignedTransaction.serialize();
   const decodedTransaction = getTransactionDecoder().decode(serializedTransaction);

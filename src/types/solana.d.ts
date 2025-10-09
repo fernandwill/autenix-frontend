@@ -1,4 +1,4 @@
-import type { Transaction } from "gill";
+import type { VersionedTransaction } from "@solana/web3.js";
 
 type PhantomPublicKey = {
   toBase58(): string;
@@ -17,8 +17,8 @@ export interface SolanaWindowProvider {
   connect: (options?: { onlyIfTrusted?: boolean }) => Promise<PhantomConnectResponse>;
   disconnect?: () => Promise<void>;
   publicKey?: PhantomPublicKey;
-  signTransaction?: (transaction: Transaction) => Promise<Transaction>;
-  signAllTransactions?: (transactions: Transaction[]) => Promise<Transaction[]>;
+  signTransaction?: (transaction: VersionedTransaction) => Promise<VersionedTransaction>;
+  signAllTransactions?: (transactions: VersionedTransaction[]) => Promise<VersionedTransaction[]>;
   on?: (event: PhantomEvent, handler: PhantomEventHandler) => void;
   off?: (event: PhantomEvent, handler: PhantomEventHandler) => void;
 }
