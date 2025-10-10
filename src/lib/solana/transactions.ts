@@ -303,6 +303,11 @@ function deriveSimulationGuidance({ simulationMessage, simulationDetails, logs }
 
   const customProgramErrorCode =
     extractCustomProgramErrorCode(simulationMessage) ?? extractCustomProgramErrorCode(simulationDetails);
+
+  if (customProgramErrorCode === 2006 || /seeds constraint/.test(haystack)) {
+    return "Transaction simulation failed because the notarization account address derived from the wallet and document hash did not match the program's expected seeds. Double-check that the document hash is correct and that you're using the same wallet that originally created the notarization.";
+  }
+
   if (customProgramErrorCode != null) {
     return `Transaction simulation failed with custom program error #${customProgramErrorCode}. Review the RPC message and simulation logs for more details.`;
   }
