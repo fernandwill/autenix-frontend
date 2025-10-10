@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, FileText, Loader2, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import type { DocumentDetailSnapshot } from "@/lib/upload-types";
 import { buildDetailStorageKey } from "@/lib/upload-types";
 
@@ -26,19 +27,23 @@ type MetaItem = { label: string; value: ReactNode; mono?: boolean };
 const STATUS_VISUALS = {
   success: {
     icon: CheckCircle2,
-    badgeClass: "border-emerald-200 bg-emerald-100 text-emerald-700",
+    badgeClass:
+      "border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-500/10 dark:text-emerald-300",
   },
   error: {
     icon: AlertTriangle,
-    badgeClass: "border-rose-200 bg-rose-100 text-rose-700",
+    badgeClass:
+      "border-rose-200 bg-rose-100 text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300",
   },
   converting: {
     icon: Loader2,
-    badgeClass: "border-sky-200 bg-sky-100 text-sky-700",
+    badgeClass:
+      "border-sky-200 bg-sky-100 text-sky-700 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-300",
   },
   default: {
     icon: Clock,
-    badgeClass: "border-slate-200 bg-slate-100 text-slate-600",
+    badgeClass:
+      "border-border bg-muted text-muted-foreground dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200",
   },
 } as const;
 
@@ -70,9 +75,9 @@ export function DocumentDetailPage() {
     : null;
   const statusIconClass = snapshot?.status === "converting" ? "h-4 w-4 animate-spin" : "h-4 w-4";
 
-  const monoValueClass = "mt-1 break-all font-mono text-sm text-slate-800";
-  const defaultValueClass = "mt-1 break-words font-medium text-slate-900";
-  const labelClass = "text-xs font-semibold uppercase tracking-wider text-slate-400";
+  const monoValueClass = "mt-1 break-all font-mono text-sm text-foreground";
+  const defaultValueClass = "mt-1 break-words font-medium text-foreground";
+  const labelClass = "text-xs font-semibold uppercase tracking-wider text-muted-foreground";
   const metaColumns: MetaItem[][] | null = snapshot
     ? [
         [
@@ -108,7 +113,10 @@ export function DocumentDetailPage() {
     : null;
 
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="relative min-h-screen bg-background text-foreground">
+      <div className="absolute right-4 top-4">
+        <ThemeToggle />
+      </div>
       <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-4 py-10">
         <div className="flex items-center justify-between gap-4">
           <Button variant="ghost" asChild className="gap-2">
@@ -117,19 +125,19 @@ export function DocumentDetailPage() {
             </Link>
           </Button>
           {entryId ? (
-            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Document ID: {entryId}
             </span>
           ) : null}
         </div>
 
         {snapshot ? (
-          <div className="mt-10 overflow-hidden rounded-3xl bg-white shadow-xl ring-1 ring-slate-200">
-            <div className="flex flex-col gap-8 border-b border-slate-100 px-8 py-10 md:flex-row md:items-start md:justify-between">
+          <div className="mt-10 overflow-hidden rounded-3xl bg-card shadow-xl ring-1 ring-border">
+            <div className="flex flex-col gap-8 border-b border-border px-8 py-10 md:flex-row md:items-start md:justify-between">
               <div className="flex-1 space-y-6">
                 <div>
-                  <h1 className="text-3xl font-semibold text-slate-900">{snapshot.fileName}</h1>
-                  <p className="mt-2 text-sm text-slate-500">
+                  <h1 className="text-3xl font-semibold text-foreground">{snapshot.fileName}</h1>
+                  <p className="mt-2 text-sm text-muted-foreground">
                     Uploaded {snapshot.uploadedAtLabel}
                     <span className="mx-2">·</span>
                     {snapshot.sizeLabel}
@@ -146,16 +154,16 @@ export function DocumentDetailPage() {
                     </span>
                   ) : null}
 
-                  <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
+                  <span className="inline-flex items-center gap-2 rounded-full border border-border bg-muted px-3 py-1 text-sm font-medium text-muted-foreground">
                     <ShieldCheck className="h-4 w-4" />
                     Only the binary hash is retained for on-chain verification
                   </span>
                 </div>
 
-                <p className="max-w-xl text-sm text-slate-600">{snapshot.statusDescription}</p>
+                <p className="max-w-xl text-sm text-muted-foreground">{snapshot.statusDescription}</p>
 
                 {snapshot.error ? (
-                  <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+                  <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300">
                     <AlertTriangle className="mt-0.5 h-4 w-4" />
                     <span>{snapshot.error}</span>
                   </div>
@@ -163,8 +171,8 @@ export function DocumentDetailPage() {
               </div>
 
               <div className="flex justify-center md:min-w-[200px]">
-                <div className="flex h-56 w-44 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-sm font-medium text-slate-500 shadow-inner">
-                  <FileText className="mb-4 h-8 w-8 text-slate-400" />
+                <div className="flex h-56 w-44 flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-muted text-sm font-medium text-muted-foreground shadow-inner">
+                  <FileText className="mb-4 h-8 w-8 text-muted-foreground" />
                   Document preview
                 </div>
               </div>
@@ -184,10 +192,10 @@ export function DocumentDetailPage() {
             </div>
           </div>
         ) : (
-          <div className="mt-16 flex flex-1 flex-col items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm">
-            <FileText className="h-10 w-10 text-slate-400" />
-            <h2 className="mt-6 text-xl font-semibold text-slate-900">Document details unavailable</h2>
-            <p className="mt-3 max-w-md text-sm text-slate-500">
+          <div className="mt-16 flex flex-1 flex-col items-center justify-center rounded-3xl border border-dashed border-border bg-card p-10 text-center shadow-sm">
+            <FileText className="h-10 w-10 text-muted-foreground" />
+            <h2 className="mt-6 text-xl font-semibold text-foreground">Document details unavailable</h2>
+            <p className="mt-3 max-w-md text-sm text-muted-foreground">
               We couldn't find details for this upload. Try opening the document from the uploads page
               again.
             </p>
