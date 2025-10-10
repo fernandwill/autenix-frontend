@@ -7,6 +7,7 @@ import { DocumentSummaryCard } from "@/components/document-summary-card";
 import { SolanaTransactionPanel } from "@/components/solana-transaction-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { DocumentDetailPage } from "@/pages/document-detail-page";
 
 // HomePage combines upload, search, and wallet status workflows.
@@ -14,7 +15,10 @@ function HomePage() {
   const [documents, setDocuments] = useState<FileUploadDocumentChange[]>([]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-muted">
+    <div className="relative flex min-h-screen flex-col bg-muted">
+      <div className="absolute right-4 top-4">
+        <ThemeToggle />
+      </div>
       <main className="flex flex-1 items-center justify-center px-4 py-12">
         <div className="grid w-full max-w-5xl gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
           <div className="space-y-6">
