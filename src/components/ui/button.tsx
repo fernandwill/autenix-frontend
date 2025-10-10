@@ -36,6 +36,7 @@ export interface ButtonProps
   asChild?: boolean;
 }
 
+// Render a themed button that supports size and variant styling via CVA.
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>((props, ref) => {
   const { className, variant, size, asChild = false, ...rest } = props;
   const Comp = asChild ? Slot : "button";

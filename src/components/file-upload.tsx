@@ -61,6 +61,7 @@ const isPdfFile = (file: File) =>
 
 const DETAIL_STORAGE_AVAILABLE = typeof window !== "undefined" && "localStorage" in window;
 
+// Generate the default .bin filename that mirrors the uploaded PDF name.
 const deriveBinFileName = (fileName: string) => {
   const trimmed = fileName.replace(/\.pdf$/i, "");
   return `${trimmed}.bin`;
@@ -235,6 +236,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
         if (notify) emitDocumentChange(currentEntry);
       };
 
+      // Finalize the current entry in an error state and surface the reason to the UI.
       const finalizeWithError = (message: string) => {
         syncEntry(
           {

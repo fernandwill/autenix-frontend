@@ -27,6 +27,7 @@ interface SolanaWalletContextValue {
 const SolanaWalletContext = createContext<SolanaWalletContextValue | undefined>(undefined);
 const base58Codec = getBase58Codec();
 
+// Provide wallet connection state and helpers to descendant components.
 export function SolanaWalletProvider({ children }: { children: ReactNode }) {
   const [provider, setProvider] = useState<SolanaWindowProvider | null>(null);
   const [address, setAddress] = useState<string | null>(null);
@@ -51,6 +52,7 @@ export function SolanaWalletProvider({ children }: { children: ReactNode }) {
     };
   }, [provider]);
 
+  // Attempt to connect to the detected Wallet Standard provider.
   const connect = useCallback(async () => {
     setConnectError(null);
     if (!provider) {
@@ -75,6 +77,7 @@ export function SolanaWalletProvider({ children }: { children: ReactNode }) {
     }
   }, [provider]);
 
+  // Gracefully disconnect from the wallet when users opt out.
   const disconnect = useCallback(async () => {
     setConnectError(null);
     if (!provider) return;
@@ -88,6 +91,7 @@ export function SolanaWalletProvider({ children }: { children: ReactNode }) {
     }
   }, [provider]);
 
+  // Adapt Wallet Standard transaction signing outputs into Gill's base64 expectations.
   const signTransaction = useMemo(() => {
     if (!provider?.signTransaction) return null;
 
@@ -132,6 +136,7 @@ export function SolanaWalletProvider({ children }: { children: ReactNode }) {
   return <SolanaWalletContext.Provider value={value}>{children}</SolanaWalletContext.Provider>;
 }
 
+// Convenient hook for consuming the wallet context with proper provider enforcement.
 export function useSolanaWallet() {
   const context = useContext(SolanaWalletContext);
   if (!context) {
@@ -140,6 +145,7 @@ export function useSolanaWallet() {
   return context;
 }
 
+// Encode Uint8Array payloads into base64 regardless of runtime environment.
 function uint8ArrayToBase64(bytes: Uint8Array) {
   if (typeof globalThis.Buffer !== "undefined") {
     return globalThis.Buffer.from(bytes).toString("base64");
@@ -156,6 +162,7 @@ function uint8ArrayToBase64(bytes: Uint8Array) {
   return btoa(binary);
 }
 
+// Decode base64 strings into Uint8Arrays across browser and Node runtimes.
 function base64ToUint8Array(base64: string): Uint8Array {
   if (typeof globalThis.Buffer !== "undefined") {
     return new Uint8Array(globalThis.Buffer.from(base64, "base64"));
@@ -184,6 +191,7 @@ type LegacyTransactionAdapter = {
   feePayer?: { toBase58: () => string; toBytes: () => Uint8Array };
 };
 
+// Shim Gill transactions into the LegacyTransaction shape expected by wallet extensions.
 function createLegacyTransactionAdapter(transaction: GillTransaction) {
   const messageBytes = new Uint8Array(transaction.messageBytes);
   const signatureEntries = new Map<string, Uint8Array | null>(
@@ -195,6 +203,7 @@ function createLegacyTransactionAdapter(transaction: GillTransaction) {
 
   const publicKeyCache = new Map<string, { toBase58: () => string; toBytes: () => Uint8Array }>();
 
+  // Lazily construct PublicKey-like wrappers so wallet adapters accept Gill addresses.
   const getPublicKeyShim = (address: string) => {
     if (publicKeyCache.has(address)) {
       return publicKeyCache.get(address)!;
@@ -207,9 +216,11 @@ function createLegacyTransactionAdapter(transaction: GillTransaction) {
     return shim;
   };
 
+  // Convert wallet signatures into Uint8Array form for consistent handling.
   const normalizeSignature = (signature: Uint8Array | number[]) =>
     signature instanceof Uint8Array ? signature : new Uint8Array(signature);
 
+  // Derive a base58 address from the wallet-provided public key object.
   const normalizePublicKey = (publicKey: { toBase58?: () => string; toBytes?: () => Uint8Array }) => {
     if (typeof publicKey?.toBase58 === "function") {
       return publicKey.toBase58();
@@ -220,6 +231,7 @@ function createLegacyTransactionAdapter(transaction: GillTransaction) {
     throw new Error("Unable to normalize public key returned by wallet extension.");
   };
 
+  // Format the collected signature map into the legacy signature array schema.
   const toLegacySignaturesArray = () =>
     Array.from(signatureEntries.entries()).map(([address, signature]) => ({
       publicKey: getPublicKeyShim(address),
@@ -249,11 +261,13 @@ function createLegacyTransactionAdapter(transaction: GillTransaction) {
     })(),
   };
 
+  // Reconstruct a Gill transaction object that reflects any mutations from the wallet.
   const getSignedTransaction = (): GillTransaction => ({
     messageBytes: transaction.messageBytes,
     signatures: Object.fromEntries(signatureEntries) as GillTransaction["signatures"],
   });
 
+  // Serialize the mutated signatures into the binary format wallet adapters expect.
   const serializeLegacyTransaction = () => {
     const signedTransaction = getSignedTransaction();
     const base64 = transactionToBase64(signedTransaction);

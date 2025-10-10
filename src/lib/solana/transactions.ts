@@ -130,6 +130,7 @@ type ConfirmTransactionAfterSendFailureConfig = {
   maxAttempts?: number;
 };
 
+// Poll signature status after a send error to detect late confirmation.
 async function confirmTransactionAfterSendFailure({
   client,
   signature: signatureString,
@@ -171,6 +172,7 @@ type SignatureStatusLike = {
   err?: unknown;
 } | null;
 
+// Determine whether an RPC status satisfies the requested commitment level.
 function hasSufficientConfirmation(status: SignatureStatusLike, commitment: Commitment): boolean {
   if (!status || status.err) {
     return false;
@@ -184,6 +186,7 @@ function hasSufficientConfirmation(status: SignatureStatusLike, commitment: Comm
 
 type ConfirmationLevel = "processed" | "confirmed" | "finalized";
 
+// Normalize legacy status fields into the modern confirmation level enum.
 function deriveConfirmationLevel(status: Exclude<SignatureStatusLike, null>): ConfirmationLevel {
   if (status.confirmationStatus) {
     return status.confirmationStatus;
@@ -201,6 +204,7 @@ function deriveConfirmationLevel(status: Exclude<SignatureStatusLike, null>): Co
   return confirmations > 0 ? "confirmed" : "processed";
 }
 
+// Collapse RPC commitment strings to the three canonical confirmation levels.
 function normalizeCommitment(commitment: Commitment): ConfirmationLevel {
   switch (commitment) {
     case "processed":
@@ -213,6 +217,7 @@ function normalizeCommitment(commitment: Commitment): ConfirmationLevel {
   }
 }
 
+// Assign a numeric priority to each confirmation level for comparisons.
 function confirmationLevelToPriority(level: ConfirmationLevel): number {
   switch (level) {
     case "processed":
@@ -226,10 +231,12 @@ function confirmationLevelToPriority(level: ConfirmationLevel): number {
   }
 }
 
+// Promise-based timeout helper for backoff loops.
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Infer the cluster moniker used by Solana explorers from the client endpoint.
 function inferClusterFromUrl(
   urlOrMoniker: SolanaClient["urlOrMoniker"],
 ): "devnet" | "mainnet" | "testnet" | "localnet" | "mainnet-beta" {
@@ -243,6 +250,7 @@ function inferClusterFromUrl(
   return "mainnet-beta";
 }
 
+// Attach simulation context to RPC send errors to aid debugging.
 function enhanceSendError(error: unknown): Error {
   const message = error instanceof Error ? error.message : String(error);
   const isSimulationFailure = /transaction simulation failed/i.test(message);
@@ -291,6 +299,7 @@ type SimulationGuidanceContext = {
   logs: string[];
 };
 
+// Produce actionable messaging based on simulation errors and logs.
 function deriveSimulationGuidance({ simulationMessage, simulationDetails, logs }: SimulationGuidanceContext): string {
   const haystack = [simulationMessage, simulationDetails, ...logs]
     .filter((value): value is string => Boolean(value))
@@ -315,6 +324,7 @@ function deriveSimulationGuidance({ simulationMessage, simulationDetails, logs }
   return "Transaction simulation failed while executing the notarization program. Review the RPC message and simulation logs for more information.";
 }
 
+// Ensure custom program error messages include both decimal and hex codes.
 function normalizeSimulationMessage(message: string): string {
   const customProgramErrorCode = extractCustomProgramErrorCode(message);
   if (customProgramErrorCode == null) {
@@ -341,6 +351,7 @@ function normalizeSimulationMessage(message: string): string {
   return `custom program error: ${decimalCode} (${hexCode})`;
 }
 
+// Parse the numeric custom program error code from RPC strings when present.
 function extractCustomProgramErrorCode(message: string | null | undefined): number | null {
   if (!message) {
     return null;
@@ -362,10 +373,12 @@ function extractCustomProgramErrorCode(message: string | null | undefined): numb
   return null;
 }
 
+// Walk nested error objects to find the most relevant simulation message.
 function extractSimulationMessage(error: unknown): string | null {
   return extractSimulationMessageInternal(error, new Set());
 }
 
+// Recursive helper for locating simulation messages without revisiting nodes.
 function extractSimulationMessageInternal(error: unknown, visited: Set<unknown>): string | null {
   if (!error) {
     return null;
@@ -439,12 +452,14 @@ function extractSimulationMessageInternal(error: unknown, visited: Set<unknown>)
   return null;
 }
 
+// Gather all log entries emitted during transaction simulation.
 function extractSimulationLogs(error: unknown): string[] {
   const logs = new Set<string>();
   collectSimulationLogs(error, logs, new Set());
   return Array.from(logs);
 }
 
+// Depth-first traversal that accumulates simulation logs from nested structures.
 function collectSimulationLogs(value: unknown, logs: Set<string>, visited: Set<unknown>) {
   if (!value || typeof value !== "object") {
     return;
@@ -485,10 +500,12 @@ function collectSimulationLogs(value: unknown, logs: Set<string>, visited: Set<u
   }
 }
 
+// Retrieve additional error context from nested simulation responses.
 function extractSimulationErrorDetails(error: unknown): string | null {
   return extractSimulationErrorDetailsInternal(error, new Set());
 }
 
+// Recursive helper that surfaces detailed simulation errors without cycles.
 function extractSimulationErrorDetailsInternal(error: unknown, visited: Set<unknown>): string | null {
   if (!error || typeof error !== "object") {
     return null;
@@ -531,6 +548,7 @@ function extractSimulationErrorDetailsInternal(error: unknown, visited: Set<unkn
   return null;
 }
 
+// Convert heterogeneous error payloads into human readable strings.
 function formatSimulationError(err: unknown): string | null {
   if (err == null) {
     return null;

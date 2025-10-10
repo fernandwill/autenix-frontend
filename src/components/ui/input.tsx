@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 
 type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
 
+// Styled text input that aligns with the design system conventions.
 const Input = React.forwardRef<HTMLInputElement, InputProps>(({ className, type = "text", ...props }, ref) => {
   return (
     <input
