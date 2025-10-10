@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DocumentDetailPage } from "@/pages/document-detail-page";
 
+// HomePage combines upload, search, and wallet status workflows.
 function HomePage() {
   const [latestDocument, setLatestDocument] = useState<FileUploadDocumentChange | null>(null);
 
@@ -54,6 +55,7 @@ function HomePage() {
   );
 }
 
+// App wires the router to the top-level route structure.
 function App() {
   return (
     <Routes>

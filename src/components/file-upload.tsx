@@ -51,6 +51,7 @@ interface UploadEntry {
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const ACCEPTED_TYPES = ["application/pdf"] as const;
 
+// Determine whether the provided file is a supported PDF document.
 const isPdfFile = (file: File) =>
   ACCEPTED_TYPES.includes(file.type as (typeof ACCEPTED_TYPES)[number]) ||
   file.name.toLowerCase().endsWith(".pdf");
@@ -66,33 +67,37 @@ const formatBytes = (bytes: number) => {
   return `${size} ${units[power]}`;
 };
 
-const getStatusLabel = (status: UploadStatus) => {
-  switch (status) {
-    case "success":
-      return "Converted";
-    case "converting":
-      return "Converting";
-    case "error":
-      return "Error";
-    default:
-      return "Queued";
-  }
+const STATUS_META: Record<UploadStatus | "default", { label: string; description: string }> = {
+  success: {
+    label: "Converted",
+    description: "Your document has been notarized and its hash is ready to be published on-chain.",
+  },
+  converting: {
+    label: "Converting",
+    description: "Conversion is running. You can leave this tab open while the process completes.",
+  },
+  error: {
+    label: "Error",
+    description: "We were unable to convert this document. Review the status information below.",
+  },
+  idle: {
+    label: "Queued",
+    description: "Conversion is running. You can leave this tab open while the process completes.",
+  },
+  default: {
+    label: "Queued",
+    description: "Conversion is running. You can leave this tab open while the process completes.",
+  },
 };
 
-const getStatusDescription = (status: UploadStatus) => {
-  switch (status) {
-    case "success":
-      return "Your document has been notarized and its hash is ready to be published on-chain.";
-    case "error":
-      return "We were unable to convert this document. Review the status information below.";
-    default:
-      return "Conversion is running. You can leave this tab open while the process completes.";
-  }
-};
+// Provide user-facing status metadata for the supplied upload status.
+const getStatusMeta = (status: UploadStatus) => STATUS_META[status] ?? STATUS_META.default;
 
 // Prepare a snapshot of an upload entry for detail pages and storage.
 const createDetailSnapshot = (entry: UploadEntry): DocumentDetailSnapshot => {
   const uploadedAtLabel = entry.uploadedAt ? new Date(entry.uploadedAt).toLocaleString() : "Unavailable";
+  const { label, description } = getStatusMeta(entry.status);
+
   return {
     id: entry.id,
     fileName: entry.file.name,
@@ -100,8 +105,8 @@ const createDetailSnapshot = (entry: UploadEntry): DocumentDetailSnapshot => {
     uploadedAt: entry.uploadedAt,
     uploadedAtLabel,
     status: entry.status,
-    statusLabel: getStatusLabel(entry.status),
-    statusDescription: getStatusDescription(entry.status),
+    statusLabel: label,
+    statusDescription: description,
     checksum: entry.checksum ?? null,
     hash: entry.hash ?? null,
     error: entry.error ?? null,
@@ -144,12 +149,14 @@ const computeDigestsFromBuffer = async (buffer: ArrayBuffer) => {
   };
 };
 
+// FileUpload coordinates PDF ingestion, notarization, and status updates.
 export function FileUpload({ onDocumentChange }: FileUploadProps) {
   const [entries, setEntries] = useState<UploadEntry[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const client = useMemo(() => getSolanaClient(), []);
   const { address, signTransaction } = useSolanaWallet();
 
+  // Derive the connected wallet instance from the Solana wallet hook.
   const wallet = useMemo(() => {
     if (!address || !signTransaction) return null;
     return {
@@ -201,6 +208,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
     }
   }, []);
 
+  // Convert an upload entry by hashing it and submitting an optional Solana memo.
   const convertEntry = useCallback(
     async (entry: UploadEntry) => {
       const { id, file } = entry;
@@ -262,6 +270,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
         console.warn("Failed to compute file digests.", digestError);
       }
 
+      // Attempt to submit the memo transaction through the connected wallet.
       const attemptTransactionSignature = async () => {
         syncEntry(
           {
@@ -338,6 +347,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
     [client, emitDocumentChange, wallet],
   );
 
+  // Stage valid PDFs for conversion and trigger processing.
   const stageEntries = useCallback(
     (fileList: FileList | null) => {
       const accepted = Array.from(fileList ?? []).filter(
@@ -374,6 +384,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
     [stageEntries],
   );
 
+  // Provide contextual helper text for the drop zone.
   const dropZoneLabel = useMemo(() => {
     if (!entries.length) return "Drop notarized PDFs here";
     if (entries.some((entry) => entry.status === "converting" || entry.status === "idle")) {
@@ -395,6 +406,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
     setEntries([]);
   }, []);
 
+  // Support keyboard activation for entry navigation.
   const handleEntryKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLLIElement>, entry: UploadEntry) => {
       if (event.key === "Enter" || event.key === " ") {

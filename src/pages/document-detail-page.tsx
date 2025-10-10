@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import type { DocumentDetailSnapshot } from "@/lib/upload-types";
 import { buildDetailStorageKey } from "@/lib/upload-types";
 
+// Retrieve a stored document snapshot from localStorage when available.
 const loadSnapshot = (id: string): DocumentDetailSnapshot | null => {
   if (typeof window === "undefined") return null;
 
@@ -37,6 +38,7 @@ const STATUS_VISUALS = {
   },
 } as const;
 
+// DocumentDetailPage renders the persisted upload metadata for a specific entry.
 export function DocumentDetailPage() {
   const { entryId } = useParams<{ entryId: string }>();
   const [snapshot, setSnapshot] = useState<DocumentDetailSnapshot | null>(() =>
