@@ -7,12 +7,11 @@ import { DocumentSummaryCard } from "@/components/document-summary-card";
 import { SolanaTransactionPanel } from "@/components/solana-transaction-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { DocumentDetailPage } from "@/pages/document-detail-page";
 
 // HomePage combines upload, search, and wallet status workflows.
 function HomePage() {
-  const [latestDocument, setLatestDocument] = useState<FileUploadDocumentChange | null>(null);
+  const [documents, setDocuments] = useState<FileUploadDocumentChange[]>([]);
 
   return (
     <div className="flex min-h-screen flex-col bg-muted">
@@ -20,7 +19,7 @@ function HomePage() {
         <div className="grid w-full max-w-5xl gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
           <div className="space-y-6">
             {/* File uploader remains the primary document ingestion path. */}
-            <FileUpload onDocumentChange={setLatestDocument} />
+            <FileUpload onDocumentsChange={setDocuments} />
             {/* Divider offers a visual cue before the hash lookup path. */}
             <div className="flex items-center gap-4 text-xs font-semibold uppercase text-muted-foreground">
               <div className="h-px flex-1 bg-muted-foreground/40" aria-hidden="true" />
@@ -44,7 +43,7 @@ function HomePage() {
           </div>
           <div className="space-y-6">
             <SolanaTransactionPanel />
-            <DocumentSummaryCard document={latestDocument} />
+            <DocumentSummaryCard documents={documents} />
           </div>
         </div>
       </main>
