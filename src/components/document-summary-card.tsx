@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { FileUploadDocumentChange } from "@/components/file-upload";
 
@@ -26,17 +28,36 @@ const TRANSACTION_STATUS_LABELS: Partial<Record<FileUploadDocumentChange["transa
 };
 
 // Resolve the appropriate transaction hash label based on the document status.
-const formatTransactionHash = (document: FileUploadDocumentChange | null) => {
+const formatTransactionHash = (document: FileUploadDocumentChange | null): ReactNode => {
   if (!document) return FALLBACK;
   if (document.transactionStatus === "error") {
     return document.error ?? "Signing failed";
   }
-  return TRANSACTION_STATUS_LABELS[document.transactionStatus] ?? document.transactionHash ?? FALLBACK;
+
+  const statusLabel = TRANSACTION_STATUS_LABELS[document.transactionStatus];
+  if (statusLabel) {
+    return statusLabel;
+  }
+
+  if (document.transactionHash && document.transactionUrl) {
+    return (
+      <a
+        href={document.transactionUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="text-primary underline underline-offset-2"
+      >
+        {document.transactionHash}
+      </a>
+    );
+  }
+
+  return document.transactionHash ?? FALLBACK;
 };
 
 // DocumentSummaryCard highlights key metadata for the most recent upload.
 export function DocumentSummaryCard({ document }: DocumentSummaryCardProps) {
-  const items = [
+  const items: { label: string; value: ReactNode }[] = [
     {
       label: "Timestamp",
       value: formatTimestamp(document?.timestamp),
@@ -68,7 +89,7 @@ export function DocumentSummaryCard({ document }: DocumentSummaryCardProps) {
         {items.map(({ label, value }) => (
           <div key={label}>
             <p className="text-xs font-medium uppercase text-muted-foreground">{label}</p>
-            <p className="mt-1 break-all font-mono text-foreground">{value}</p>
+            <div className="mt-1 break-all font-mono text-foreground">{value}</div>
           </div>
         ))}
       </CardContent>

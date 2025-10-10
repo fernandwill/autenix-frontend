@@ -27,6 +27,7 @@ export type FileUploadDocumentChange = {
   binHash: string | null;
   binFileName: string | null;
   transactionHash: string | null;
+  transactionUrl: string | null;
   transactionStatus: "idle" | "pending" | "confirmed" | "cancelled" | "error";
   error?: string | null;
 };
@@ -50,6 +51,7 @@ interface UploadEntry {
   binFileName?: string;
   error?: string;
   transactionHash?: string;
+  transactionUrl?: string | null;
   transactionStatus?: FileUploadDocumentChange["transactionStatus"];
   transactionError?: string;
 }
@@ -67,6 +69,7 @@ type PersistedUploadEntry = {
   binFileName?: string;
   error?: string;
   transactionHash?: string;
+  transactionUrl?: string | null;
   transactionStatus?: FileUploadDocumentChange["transactionStatus"];
   transactionError?: string;
 };
@@ -141,6 +144,7 @@ const createDetailSnapshot = (entry: UploadEntry): DocumentDetailSnapshot => {
     binHash: entry.binHash ?? null,
     binFileName: entry.binFileName ?? entry.binFile?.name ?? null,
     transactionHash: entry.transactionHash ?? null,
+    transactionUrl: entry.transactionUrl ?? null,
     error: entry.error ?? null,
   };
 };
@@ -230,6 +234,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
         binHash: entry.binHash ?? null,
         binFileName: entry.binFileName ?? entry.binFile?.name ?? null,
         transactionHash: entry.transactionHash ?? null,
+        transactionUrl: entry.transactionUrl ?? null,
         transactionStatus: entry.transactionStatus ?? "idle",
         error: entry.transactionError ?? entry.error ?? null,
       });
@@ -316,6 +321,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
             progress: 0,
             transactionStatus: "error",
             transactionError: message,
+            transactionUrl: null,
           },
           true,
         );
@@ -393,6 +399,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
           {
             transactionStatus: "pending",
             transactionError: undefined,
+            transactionUrl: null,
           },
           true,
         );
@@ -403,6 +410,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
             {
               transactionStatus: "error",
               transactionError: "Binary hash unavailable. Unable to submit notarization.",
+              transactionUrl: null,
             },
             true,
           );
@@ -410,7 +418,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
         }
 
         try {
-          const { signature } = await submitNotarizationTransaction({
+          const { signature, explorerUrl } = await submitNotarizationTransaction({
             client,
             wallet,
             documentHashHex,
@@ -422,6 +430,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
               transactionHash: signature,
               transactionStatus: "confirmed",
               transactionError: undefined,
+              transactionUrl: explorerUrl,
             },
             true,
           );
@@ -440,6 +449,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
               {
                 transactionStatus: "cancelled",
                 transactionError: undefined,
+                transactionUrl: null,
               },
               true,
             );
@@ -450,6 +460,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
             {
               transactionStatus: "error",
               transactionError: message,
+              transactionUrl: null,
             },
             true,
           );
@@ -687,7 +698,18 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
                     {entry.transactionStatus === "confirmed" && entry.transactionHash ? (
                       <p className="text-xs text-muted-foreground">
                         Transaction hash:{" "}
-                        <span className="break-all font-mono">{entry.transactionHash}</span>
+                        {entry.transactionUrl ? (
+                          <a
+                            href={entry.transactionUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="break-all font-mono text-primary underline underline-offset-2"
+                          >
+                            {entry.transactionHash}
+                          </a>
+                        ) : (
+                          <span className="break-all font-mono">{entry.transactionHash}</span>
+                        )}
                       </p>
                     ) : null}
                     {entry.transactionStatus === "cancelled" ? (
