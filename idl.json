@@ -1,0 +1,207 @@
+{
+    "version": "0.1.0",
+    "name": "sol_program",
+    "instructions": [
+        {
+            "name": "initialize",
+            "accounts": [],
+            "args": []
+        },
+        {
+            "name": "createNotarization",
+            "accounts": [
+                {
+                    "name": "notary",
+                    "isMut": true,
+                    "isSigner": true
+                },
+                {
+                    "name": "notarization",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "systemProgram",
+                    "isMut": false,
+                    "isSigner": false
+                }
+            ],
+            "args": [
+                {
+                    "name": "documentHash",
+                    "type": {
+                        "array": [
+                            "u8",
+                            32
+                        ]
+                    }
+                },
+                {
+                    "name": "documentName",
+                    "type": "string"
+                },
+                {
+                    "name": "hashVersion",
+                    "type": "u8"
+                },
+                {
+                    "name": "version",
+                    "type": "u8"
+                }
+            ]
+        },
+        {
+            "name": "updateNotarization",
+            "accounts": [
+                {
+                    "name": "notary",
+                    "isMut": true,
+                    "isSigner": true
+                },
+                {
+                    "name": "oldNotarization",
+                    "isMut": false,
+                    "isSigner": false
+                },
+                {
+                    "name": "newNotarization",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "systemProgram",
+                    "isMut": false,
+                    "isSigner": false
+                }
+            ],
+            "args": [
+                {
+                    "name": "oldDocumentHash",
+                    "type": {
+                        "array": [
+                            "u8",
+                            32
+                        ]
+                    }
+                },
+                {
+                    "name": "oldVersion",
+                    "type": "u8"
+                },
+                {
+                    "name": "newDocumentHash",
+                    "type": {
+                        "array": [
+                            "u8",
+                            32
+                        ]
+                    }
+                },
+                {
+                    "name": "newVersion",
+                    "type": "u8"
+                },
+                {
+                    "name": "hashVersion",
+                    "type": "u8"
+                }
+            ]
+        }
+    ],
+    "accounts": [
+        {
+            "name": "Notarization",
+            "type": {
+                "kind": "struct",
+                "fields": [
+                    {
+                        "name": "hash",
+                        "type": {
+                            "array": [
+                                "u8",
+                                32
+                            ]
+                        }
+                    },
+                    {
+                        "name": "maker",
+                        "type": "publicKey"
+                    },
+                    {
+                        "name": "timestamp",
+                        "type": "i64"
+                    },
+                    {
+                        "name": "version",
+                        "type": "u8"
+                    },
+                    {
+                        "name": "documentName",
+                        "type": "string"
+                    },
+                    {
+                        "name": "bump",
+                        "type": "u8"
+                    },
+                    {
+                        "name": "hashVersion",
+                        "type": "u8"
+                    },
+                    {
+                        "name": "additional",
+                        "type": "u8"
+                    }
+                ]
+            }
+        }
+    ],
+    "events": [
+        {
+            "name": "DocumentNotarized",
+            "fields": [
+                {
+                    "name": "notarization",
+                    "type": "publicKey",
+                    "index": false
+                },
+                {
+                    "name": "maker",
+                    "type": "publicKey",
+                    "index": false
+                },
+                {
+                    "name": "hash",
+                    "type": {
+                        "array": [
+                            "u8",
+                            32
+                        ]
+                    },
+                    "index": false
+                },
+                {
+                    "name": "timestamp",
+                    "type": "i64",
+                    "index": false
+                }
+            ]
+        }
+    ],
+    "errors": [
+        {
+            "code": 6000,
+            "name": "HashMismatch",
+            "msg": "Document hash does not match"
+        },
+        {
+            "code": 6001,
+            "name": "NotarizationRevoked",
+            "msg": "This notarization has been revoked"
+        },
+        {
+            "code": 6002,
+            "name": "AlreadyRevoked",
+            "msg": "Notarization is already revoked"
+        }
+    ]
+}

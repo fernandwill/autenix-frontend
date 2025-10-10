@@ -17,7 +17,7 @@ import { Progress } from "@/components/ui/progress";
 import { buildDetailStorageKey, type DocumentDetailSnapshot, type UploadStatus } from "@/lib/upload-types";
 import { cn } from "@/lib/utils";
 import { getSolanaClient } from "@/lib/solana/client";
-import { sendMemoTransaction } from "@/lib/solana/transactions";
+import { submitNotarizationTransaction } from "@/lib/solana/transactions";
 import { useSolanaWallet } from "@/lib/solana/wallet-context";
 
 export type FileUploadDocumentChange = {
@@ -208,11 +208,12 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
     }
   }, []);
 
-  // Convert an upload entry by hashing it and submitting an optional Solana memo.
+  // Convert an upload entry by hashing it and submitting a notarization transaction on Solana.
   const convertEntry = useCallback(
     async (entry: UploadEntry) => {
       const { id, file } = entry;
       let currentEntry: UploadEntry = entry;
+      let computedHash: string | null = entry.hash ?? null;
 
       // Apply entry updates, update state, and optionally notify parents.
       const syncEntry = (updates: Partial<UploadEntry>, notify = false) => {
@@ -265,12 +266,13 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
 
       try {
         const { checksum, hash } = await computeDigestsFromBuffer(fileBuffer);
+        computedHash = hash;
         syncEntry({ checksum, hash }, true);
       } catch (digestError) {
         console.warn("Failed to compute file digests.", digestError);
       }
 
-      // Attempt to submit the memo transaction through the connected wallet.
+      // Attempt to submit the notarization transaction through the connected wallet.
       const attemptTransactionSignature = async () => {
         syncEntry(
           {
@@ -280,18 +282,24 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
           true,
         );
 
-        const memoParts = [
-          `Document ${currentEntry.file.name}`,
-          currentEntry.hash ? `hash:${currentEntry.hash}` : null,
-          currentEntry.checksum ? `checksum:${currentEntry.checksum}` : null,
-        ].filter(Boolean);
-        const memo = memoParts.join(" ") || `Document ${currentEntry.id}`;
+        const documentHashHex = computedHash ?? currentEntry.hash ?? null;
+        if (!documentHashHex) {
+          syncEntry(
+            {
+              transactionStatus: "error",
+              transactionError: "Document hash unavailable. Unable to submit notarization.",
+            },
+            true,
+          );
+          return;
+        }
 
         try {
-          const { signature } = await sendMemoTransaction({
+          const { signature } = await submitNotarizationTransaction({
             client,
             wallet,
-            memo,
+            documentHashHex,
+            documentName: currentEntry.file.name,
           });
 
           syncEntry(
@@ -307,7 +315,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
           const message =
             error instanceof Error
               ? error.message
-              : "Failed to sign the Solana transaction.";
+              : "Failed to submit the notarization transaction.";
           const rejected =
             rejectionCode === 4001 ||
             /reject/i.test(message);

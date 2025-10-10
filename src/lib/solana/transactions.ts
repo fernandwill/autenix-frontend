@@ -12,51 +12,71 @@ import {
   type SolanaClient,
   type TransactionWithBlockhashLifetime,
 } from "gill";
-import { getAddMemoInstruction } from "gill/programs";
+
+import {
+  documentHashFromHex,
+  ensureU8,
+  findNotarizationPda,
+  getCreateNotarizationInstruction,
+} from "@/lib/solana/notarization-program";
 
 export type GillWalletAdapter = {
   address: Address<string>;
   signTransaction: (transactionBase64: string) => Promise<string>;
 };
 
-export type SendMemoTransactionConfig = {
+export type SubmitNotarizationTransactionConfig = {
   client: SolanaClient;
   wallet: GillWalletAdapter;
-  memo: string;
+  documentHashHex: string;
+  documentName: string;
+  hashVersion?: number;
+  version?: number;
   commitment?: Commitment;
 };
 
-export type SendMemoTransactionResult = {
+export type SubmitNotarizationTransactionResult = {
   signature: string;
   explorerUrl: string;
 };
 
 /**
- * Construct, sign, and submit a memo transaction using the Gill SDK.
+ * Construct, sign, and submit a notarization transaction using the deployed program.
  */
-export async function sendMemoTransaction({
+export async function submitNotarizationTransaction({
   client,
   wallet,
-  memo,
+  documentHashHex,
+  documentName,
+  hashVersion = 1,
+  version = 1,
   commitment = "confirmed",
-}: SendMemoTransactionConfig): Promise<SendMemoTransactionResult> {
-  if (!memo.trim()) {
-    throw new Error("A memo message is required before submitting a transaction.");
-  }
+}: SubmitNotarizationTransactionConfig): Promise<SubmitNotarizationTransactionResult> {
+  const documentHash = documentHashFromHex(documentHashHex);
+  const normalizedHashVersion = ensureU8(hashVersion, "hashVersion");
+  const normalizedVersion = ensureU8(version, "version");
 
   const { value: latestBlockhash } = await client.rpc.getLatestBlockhash().send();
+  const [notarizationAddress] = await findNotarizationPda({
+    documentHash,
+    notary: wallet.address,
+  });
+
+  const instruction = getCreateNotarizationInstruction({
+    documentHash,
+    documentName,
+    hashVersion: normalizedHashVersion,
+    version: normalizedVersion,
+    notarizationAccount: notarizationAddress,
+    notary: wallet.address,
+  });
 
   const transactionMessage = createTransaction({
     version: "legacy",
     feePayer: createNoopSigner(wallet.address),
-    instructions: [
-      // TODO: Swap this helper for your program's instruction builder (using your program ID) when ready.
-      getAddMemoInstruction({
-        memo,
-      }),
-    ],
+    instructions: [instruction],
     latestBlockhash,
-    computeUnitLimit: 50_000,
+    computeUnitLimit: 200_000,
     computeUnitPrice: 1_000,
   });
 

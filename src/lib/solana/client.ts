@@ -1,6 +1,7 @@
 import { createSolanaClient, type SolanaClient } from "gill";
 
-const DEFAULT_CLUSTER = (import.meta.env.VITE_SOLANA_CLUSTER ?? "devnet") as string;
+const DEVNET_RPC_URL = "https://api.devnet.solana.com";
+const DEFAULT_CLUSTER = (import.meta.env.VITE_SOLANA_CLUSTER ?? DEVNET_RPC_URL) as string;
 
 let cachedClient: SolanaClient | null = null;
 
