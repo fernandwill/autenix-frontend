@@ -62,7 +62,7 @@ export async function submitNotarizationTransaction({
   const [notarizationAddress] = await findNotarizationPda({
     notary: wallet.address,
     documentHash,
-    version: Uint8Array.of(normalizedVersion),
+    version: [normalizedVersion],
   });
 
   const instruction = getCreateNotarizationInstruction({
