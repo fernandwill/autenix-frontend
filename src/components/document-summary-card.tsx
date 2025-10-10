@@ -116,18 +116,23 @@ export function DocumentSummaryCard({ documents }: DocumentSummaryCardProps) {
                         Uploaded {formatTimestamp(document.timestamp)}
                       </p>
                     </div>
-                    <Button asChild size="sm" variant="outline">
-                      <Link to={`/documents/${document.id}`}>View details</Link>
-                    </Button>
                   </div>
 
-                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                    {items.map(({ label, value }) => (
-                      <div key={label}>
-                        <p className="text-xs font-medium uppercase text-muted-foreground">{label}</p>
-                        <div className="mt-1 break-all font-mono text-foreground">{value}</div>
-                      </div>
-                    ))}
+                  <div className="mt-4 space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {items.map(({ label, value }) => (
+                        <div key={label}>
+                          <p className="text-xs font-medium uppercase text-muted-foreground">{label}</p>
+                          <div className="mt-1 break-all font-mono text-foreground">{value}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex justify-end">
+                      <Button asChild size="sm" variant="outline">
+                        <Link to={`/documents/${document.id}`}>View Details</Link>
+                      </Button>
+                    </div>
                   </div>
                 </li>
               );

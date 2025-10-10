@@ -110,6 +110,7 @@ const isPdfFile = (file: File) =>
 
 const DETAIL_STORAGE_AVAILABLE = typeof window !== "undefined" && "localStorage" in window;
 const ENTRY_STORAGE_KEY = "file-upload-entries";
+const COMPLETED_STORAGE_KEY = "file-upload-completed-documents";
 
 // Generate the default .bin filename that mirrors the uploaded PDF name.
 const deriveBinFileName = (fileName: string) => {
@@ -236,6 +237,45 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
       return [];
     }
   });
+  const [completedDocuments, setCompletedDocuments] = useState<FileUploadDocumentChange[]>(() => {
+    if (!DETAIL_STORAGE_AVAILABLE) {
+      return [];
+    }
+
+    try {
+      const stored = window.localStorage.getItem(COMPLETED_STORAGE_KEY);
+      if (!stored) return [];
+
+      const parsed = JSON.parse(stored) as unknown;
+      if (!Array.isArray(parsed)) return [];
+
+      return parsed
+        .map((item) => {
+          const document = item as Partial<FileUploadDocumentChange>;
+          if (!document || typeof document !== "object" || typeof document.id !== "string") {
+            return null;
+          }
+
+          return {
+            id: document.id,
+            fileName: document.fileName ?? "Untitled document",
+            timestamp: document.timestamp ?? new Date().toISOString(),
+            checksum: document.checksum ?? null,
+            binHash: document.binHash ?? null,
+            binFileName: document.binFileName ?? null,
+            version: document.version ?? null,
+            transactionHash: document.transactionHash ?? null,
+            transactionUrl: document.transactionUrl ?? null,
+            transactionStatus: (document.transactionStatus ?? "idle") as FileUploadDocumentChange["transactionStatus"],
+            error: document.error ?? null,
+          } satisfies FileUploadDocumentChange;
+        })
+        .filter((document): document is FileUploadDocumentChange => Boolean(document));
+    } catch (error) {
+      console.warn("Failed to restore stored documents.", error);
+      return [];
+    }
+  });
   const [documentVersion, setDocumentVersion] = useState<number>(1);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const client = useMemo(() => getSolanaClient(), []);
@@ -251,26 +291,26 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
   }, [address, signTransaction]);
 
   const emitDocumentsChange = useCallback(
-    (entriesToEmit: UploadEntry[]) => {
+    (documentsToEmit: FileUploadDocumentChange[]) => {
       if (!onDocumentsChange) return;
 
-      const sortedEntries = [...entriesToEmit].sort((a, b) => {
-        const aTime = Date.parse(a.uploadedAt ?? "");
-        const bTime = Date.parse(b.uploadedAt ?? "");
+      const sortedEntries = [...documentsToEmit].sort((a, b) => {
+        const aTime = Date.parse(a.timestamp ?? "");
+        const bTime = Date.parse(b.timestamp ?? "");
         if (Number.isNaN(aTime) && Number.isNaN(bTime)) return 0;
         if (Number.isNaN(aTime)) return 1;
         if (Number.isNaN(bTime)) return -1;
         return bTime - aTime;
       });
 
-      onDocumentsChange(sortedEntries.map(mapEntryToDocumentChange));
+      onDocumentsChange(sortedEntries);
     },
     [onDocumentsChange],
   );
 
   useEffect(() => {
-    emitDocumentsChange(entries);
-  }, [entries, emitDocumentsChange]);
+    emitDocumentsChange(completedDocuments);
+  }, [completedDocuments, emitDocumentsChange]);
 
   useEffect(() => {
     if (!DETAIL_STORAGE_AVAILABLE) {
@@ -305,6 +345,21 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
       console.warn("Failed to persist uploads.", error);
     }
   }, [entries]);
+
+  useEffect(() => {
+    if (!DETAIL_STORAGE_AVAILABLE) return;
+
+    try {
+      if (!completedDocuments.length) {
+        window.localStorage.removeItem(COMPLETED_STORAGE_KEY);
+        return;
+      }
+
+      window.localStorage.setItem(COMPLETED_STORAGE_KEY, JSON.stringify(completedDocuments));
+    } catch (error) {
+      console.warn("Failed to persist completed documents.", error);
+    }
+  }, [completedDocuments]);
 
   // Open the per-document detail page, falling back to same-tab navigation.
   const openEntryDetails = useCallback((entry: UploadEntry) => {
@@ -479,6 +534,15 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
       });
 
       await attemptTransactionSignature();
+
+      persistDetailSnapshot(currentEntry);
+
+      setCompletedDocuments((prev) => {
+        const next = prev.filter((document) => document.id !== currentEntry.id);
+        return [...next, mapEntryToDocumentChange(currentEntry)];
+      });
+
+      setEntries((prev) => prev.filter((item) => item.id !== id));
     },
     [client, wallet],
   );
