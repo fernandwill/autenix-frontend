@@ -22,6 +22,7 @@ import { useSolanaWallet } from "@/lib/solana/wallet-context";
 
 export type FileUploadDocumentChange = {
   id: string;
+  fileName: string;
   timestamp: string;
   checksum: string | null;
   binHash: string | null;
@@ -34,7 +35,7 @@ export type FileUploadDocumentChange = {
 };
 
 type FileUploadProps = {
-  onDocumentChange?: (document: FileUploadDocumentChange) => void;
+  onDocumentsChange?: (documents: FileUploadDocumentChange[]) => void;
 };
 
 interface UploadEntry {
@@ -87,6 +88,20 @@ const clampVersion = (value: number): number => {
   const normalized = Math.trunc(value);
   return Math.min(Math.max(normalized, MIN_VERSION), MAX_VERSION);
 };
+
+const mapEntryToDocumentChange = (entry: UploadEntry): FileUploadDocumentChange => ({
+  id: entry.id,
+  fileName: entry.fileName,
+  timestamp: entry.uploadedAt,
+  checksum: entry.checksum ?? null,
+  binHash: entry.binHash ?? null,
+  binFileName: entry.binFileName ?? entry.binFile?.name ?? null,
+  version: entry.version ?? null,
+  transactionHash: entry.transactionHash ?? null,
+  transactionUrl: entry.transactionUrl ?? null,
+  transactionStatus: entry.transactionStatus ?? "idle",
+  error: entry.transactionError ?? entry.error ?? null,
+});
 
 // Determine whether the provided file is a supported PDF document.
 const isPdfFile = (file: File) =>
@@ -198,7 +213,7 @@ const computeDigestsFromBuffer = async (buffer: ArrayBuffer) => {
 };
 
 // FileUpload coordinates PDF ingestion, notarization, and status updates.
-export function FileUpload({ onDocumentChange }: FileUploadProps) {
+export function FileUpload({ onDocumentsChange }: FileUploadProps) {
   const [entries, setEntries] = useState<UploadEntry[]>(() => {
     if (!DETAIL_STORAGE_AVAILABLE) {
       return [];
@@ -225,7 +240,6 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const client = useMemo(() => getSolanaClient(), []);
   const { address, signTransaction } = useSolanaWallet();
-  const hasHydratedPersistedDocument = useRef(false);
 
   // Derive the connected wallet instance from the Solana wallet hook.
   const wallet = useMemo(() => {
@@ -236,37 +250,27 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
     };
   }, [address, signTransaction]);
 
-  // Broadcast entry updates to the parent component.
-  const emitDocumentChange = useCallback(
-    (entry: UploadEntry) => {
-      if (!onDocumentChange) return;
+  const emitDocumentsChange = useCallback(
+    (entriesToEmit: UploadEntry[]) => {
+      if (!onDocumentsChange) return;
 
-      onDocumentChange({
-        id: entry.id,
-        timestamp: entry.uploadedAt,
-        checksum: entry.checksum ?? null,
-        binHash: entry.binHash ?? null,
-        binFileName: entry.binFileName ?? entry.binFile?.name ?? null,
-        version: entry.version ?? null,
-        transactionHash: entry.transactionHash ?? null,
-        transactionUrl: entry.transactionUrl ?? null,
-        transactionStatus: entry.transactionStatus ?? "idle",
-        error: entry.transactionError ?? entry.error ?? null,
+      const sortedEntries = [...entriesToEmit].sort((a, b) => {
+        const aTime = Date.parse(a.uploadedAt ?? "");
+        const bTime = Date.parse(b.uploadedAt ?? "");
+        if (Number.isNaN(aTime) && Number.isNaN(bTime)) return 0;
+        if (Number.isNaN(aTime)) return 1;
+        if (Number.isNaN(bTime)) return -1;
+        return bTime - aTime;
       });
+
+      onDocumentsChange(sortedEntries.map(mapEntryToDocumentChange));
     },
-    [onDocumentChange],
+    [onDocumentsChange],
   );
 
   useEffect(() => {
-    if (hasHydratedPersistedDocument.current) return;
-    if (!entries.length) return;
-
-    const persistedEntries = entries.filter((entry) => entry.file === null);
-    if (!persistedEntries.length) return;
-
-    emitDocumentChange(persistedEntries[persistedEntries.length - 1]);
-    hasHydratedPersistedDocument.current = true;
-  }, [entries, emitDocumentChange]);
+    emitDocumentsChange(entries);
+  }, [entries, emitDocumentsChange]);
 
   useEffect(() => {
     if (!DETAIL_STORAGE_AVAILABLE) {
@@ -327,26 +331,22 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
       let binFile: File | null = entry.binFile ?? null;
       let binFileName = entry.binFileName ?? deriveBinFileName(entry.fileName);
 
-      // Apply entry updates, update state, and optionally notify parents.
-      const syncEntry = (updates: Partial<UploadEntry>, notify = false) => {
+      // Apply entry updates and refresh state with the latest entry snapshot.
+      const syncEntry = (updates: Partial<UploadEntry>) => {
         currentEntry = { ...currentEntry, ...updates };
         setEntries((prev) => prev.map((item) => (item.id === id ? currentEntry : item)));
-        if (notify) emitDocumentChange(currentEntry);
       };
 
       // Finalize the current entry in an error state and surface the reason to the UI.
       const finalizeWithError = (message: string) => {
-        syncEntry(
-          {
-            status: "error",
-            error: message,
-            progress: 0,
-            transactionStatus: "error",
-            transactionError: message,
-            transactionUrl: null,
-          },
-          true,
-        );
+        syncEntry({
+          status: "error",
+          error: message,
+          progress: 0,
+          transactionStatus: "error",
+          transactionError: message,
+          transactionUrl: null,
+        });
       };
 
       syncEntry({
@@ -402,40 +402,31 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
 
         const { checksum, hash } = await computeDigestsFromBuffer(fileBuffer);
         computedBinHash = hash;
-        syncEntry(
-          {
-            checksum,
-            binHash: hash,
-            binFile: binFile ?? null,
-            binFileName,
-          },
-          true,
-        );
+        syncEntry({
+          checksum,
+          binHash: hash,
+          binFile: binFile ?? null,
+          binFileName,
+        });
       } catch (digestError) {
         console.warn("Failed to compute file digests.", digestError);
       }
 
       // Attempt to submit the notarization transaction through the connected wallet.
       const attemptTransactionSignature = async () => {
-        syncEntry(
-          {
-            transactionStatus: "pending",
-            transactionError: undefined,
-            transactionUrl: null,
-          },
-          true,
-        );
+        syncEntry({
+          transactionStatus: "pending",
+          transactionError: undefined,
+          transactionUrl: null,
+        });
 
         const documentHashHex = computedBinHash ?? currentEntry.binHash ?? null;
         if (!documentHashHex) {
-          syncEntry(
-            {
-              transactionStatus: "error",
-              transactionError: "Binary hash unavailable. Unable to submit notarization.",
-              transactionUrl: null,
-            },
-            true,
-          );
+          syncEntry({
+            transactionStatus: "error",
+            transactionError: "Binary hash unavailable. Unable to submit notarization.",
+            transactionUrl: null,
+          });
           return;
         }
 
@@ -448,15 +439,12 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
             version: currentEntry.version,
           });
 
-          syncEntry(
-            {
-              transactionHash: signature,
-              transactionStatus: "confirmed",
-              transactionError: undefined,
-              transactionUrl: explorerUrl,
-            },
-            true,
-          );
+          syncEntry({
+            transactionHash: signature,
+            transactionStatus: "confirmed",
+            transactionError: undefined,
+            transactionUrl: explorerUrl,
+          });
         } catch (error) {
           const rejectionCode = (error as { code?: number })?.code;
           const message =
@@ -468,40 +456,31 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
             /reject/i.test(message);
 
           if (rejected) {
-            syncEntry(
-              {
-                transactionStatus: "cancelled",
-                transactionError: undefined,
-                transactionUrl: null,
-              },
-              true,
-            );
+            syncEntry({
+              transactionStatus: "cancelled",
+              transactionError: undefined,
+              transactionUrl: null,
+            });
             return;
           }
 
-          syncEntry(
-            {
-              transactionStatus: "error",
-              transactionError: message,
-              transactionUrl: null,
-            },
-            true,
-          );
+          syncEntry({
+            transactionStatus: "error",
+            transactionError: message,
+            transactionUrl: null,
+          });
         }
       };
 
       syncEntry({ progress: 100 });
-      syncEntry(
-        {
-          status: "success",
-          progress: 100,
-        },
-        true,
-      );
+      syncEntry({
+        status: "success",
+        progress: 100,
+      });
 
       await attemptTransactionSignature();
     },
-    [client, emitDocumentChange, wallet],
+    [client, wallet],
   );
 
   // Stage valid PDFs for conversion and trigger processing.
@@ -535,11 +514,10 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
       setEntries((prev) => [...prev, ...preparedEntries]);
 
       preparedEntries.forEach((newEntry) => {
-        emitDocumentChange(newEntry);
         void convertEntry(newEntry);
       });
     },
-    [convertEntry, documentVersion, emitDocumentChange],
+    [convertEntry, documentVersion],
   );
 
   // Support drag-and-drop uploads as an alternative to the file picker.
