@@ -17,6 +17,8 @@ const formatTimestamp = (value?: string | null) => {
 // Surface checksum values while handling nullish content gracefully.
 const formatChecksum = (value?: string | null) => value ?? FALLBACK;
 
+const formatBinaryFile = (value?: string | null) => value ?? FALLBACK;
+
 const TRANSACTION_STATUS_LABELS: Partial<Record<FileUploadDocumentChange["transactionStatus"], string>> = {
   pending: "Awaiting signature",
   cancelled: "Signature cancelled",
@@ -41,6 +43,14 @@ export function DocumentSummaryCard({ document }: DocumentSummaryCardProps) {
     {
       label: "Checksum",
       value: formatChecksum(document?.checksum),
+    },
+    {
+      label: "Binary File",
+      value: formatBinaryFile(document?.binFileName),
+    },
+    {
+      label: "Binary Hash",
+      value: formatChecksum(document?.binHash),
     },
     {
       label: "Transaction Hash",

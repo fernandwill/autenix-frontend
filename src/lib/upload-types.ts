@@ -10,7 +10,9 @@ export type DocumentDetailSnapshot = {
   statusLabel: string;
   statusDescription: string;
   checksum: string | null;
-  hash: string | null;
+  binHash: string | null;
+  binFileName: string | null;
+  transactionHash: string | null;
   error: string | null;
 };
 
