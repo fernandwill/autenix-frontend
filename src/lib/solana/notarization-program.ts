@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { getProgramDerivedAddress, getAddressEncoder, type ProgramDerivedAddress } from "@solana/addresses";
 import { AccountRole, type Instruction } from "@solana/instructions";
 import type { Address } from "gill";
@@ -26,16 +27,19 @@ export type NotarizationSeeds = {
 export async function findNotarizationPda({
   documentHash,
   notary,
-}: NotarizationSeeds): Promise<ProgramDerivedAddress<Address<string>>> {
+  version
+}: {
+  notary: Address,
+  documentHash: any,
+  version: any
+}): Promise<ProgramDerivedAddress<Address<string>>> {
   if (documentHash.length !== DOCUMENT_HASH_BYTE_LENGTH) {
     throw new Error(`Document hash must be ${DOCUMENT_HASH_BYTE_LENGTH} bytes.`);
   }
 
-  const seeds = [PDA_SEED_PREFIX_BYTES, addressEncoder.encode(notary), documentHash];
-
   return getProgramDerivedAddress({
     programAddress: NOTARIZATION_PROGRAM_ID,
-    seeds,
+    seeds: [PDA_SEED_PREFIX_BYTES, addressEncoder.encode(notary), documentHash, version],
   });
 }
 

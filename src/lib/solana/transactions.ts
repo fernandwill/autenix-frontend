@@ -60,8 +60,9 @@ export async function submitNotarizationTransaction({
 
   const { value: latestBlockhash } = await client.rpc.getLatestBlockhash().send();
   const [notarizationAddress] = await findNotarizationPda({
-    documentHash,
     notary: wallet.address,
+    documentHash,
+    version: [normalizedVersion]
   });
 
   const instruction = getCreateNotarizationInstruction({
@@ -72,6 +73,8 @@ export async function submitNotarizationTransaction({
     notarizationAccount: notarizationAddress,
     notary: wallet.address,
   });
+
+  console.log(instruction);
 
   const transactionMessage = createTransaction({
     version: "legacy",
