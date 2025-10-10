@@ -37,19 +37,39 @@ type FileUploadProps = {
 
 interface UploadEntry {
   id: string;
-  file: File;
+  file: File | null;
+  fileName: string;
+  fileSize: number;
+  fileType: string;
   progress: number;
   status: UploadStatus;
   uploadedAt: string;
   checksum?: string;
   binHash?: string;
-  binFile?: File;
+  binFile?: File | null;
   binFileName?: string;
   error?: string;
   transactionHash?: string;
   transactionStatus?: FileUploadDocumentChange["transactionStatus"];
   transactionError?: string;
 }
+
+type PersistedUploadEntry = {
+  id: string;
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  progress: number;
+  status: UploadStatus;
+  uploadedAt: string;
+  checksum?: string;
+  binHash?: string;
+  binFileName?: string;
+  error?: string;
+  transactionHash?: string;
+  transactionStatus?: FileUploadDocumentChange["transactionStatus"];
+  transactionError?: string;
+};
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const ACCEPTED_TYPES = ["application/pdf"] as const;
@@ -60,6 +80,7 @@ const isPdfFile = (file: File) =>
   file.name.toLowerCase().endsWith(".pdf");
 
 const DETAIL_STORAGE_AVAILABLE = typeof window !== "undefined" && "localStorage" in window;
+const ENTRY_STORAGE_KEY = "file-upload-entries";
 
 // Generate the default .bin filename that mirrors the uploaded PDF name.
 const deriveBinFileName = (fileName: string) => {
@@ -109,8 +130,8 @@ const createDetailSnapshot = (entry: UploadEntry): DocumentDetailSnapshot => {
 
   return {
     id: entry.id,
-    fileName: entry.file.name,
-    sizeLabel: formatBytes(entry.file.size),
+    fileName: entry.fileName,
+    sizeLabel: formatBytes(entry.fileSize),
     uploadedAt: entry.uploadedAt,
     uploadedAtLabel,
     status: entry.status,
@@ -162,10 +183,31 @@ const computeDigestsFromBuffer = async (buffer: ArrayBuffer) => {
 
 // FileUpload coordinates PDF ingestion, notarization, and status updates.
 export function FileUpload({ onDocumentChange }: FileUploadProps) {
-  const [entries, setEntries] = useState<UploadEntry[]>([]);
+  const [entries, setEntries] = useState<UploadEntry[]>(() => {
+    if (!DETAIL_STORAGE_AVAILABLE) {
+      return [];
+    }
+
+    try {
+      const stored = window.localStorage.getItem(ENTRY_STORAGE_KEY);
+      if (!stored) return [];
+
+      const parsed: PersistedUploadEntry[] = JSON.parse(stored);
+      return parsed.map((entry) => ({
+        ...entry,
+        file: null,
+        binFile: null,
+        fileType: entry.fileType ?? "application/pdf",
+      } satisfies UploadEntry));
+    } catch (error) {
+      console.warn("Failed to restore stored uploads.", error);
+      return [];
+    }
+  });
   const inputRef = useRef<HTMLInputElement | null>(null);
   const client = useMemo(() => getSolanaClient(), []);
   const { address, signTransaction } = useSolanaWallet();
+  const hasHydratedPersistedDocument = useRef(false);
 
   // Derive the connected wallet instance from the Solana wallet hook.
   const wallet = useMemo(() => {
@@ -196,6 +238,17 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
   );
 
   useEffect(() => {
+    if (hasHydratedPersistedDocument.current) return;
+    if (!entries.length) return;
+
+    const persistedEntries = entries.filter((entry) => entry.file === null);
+    if (!persistedEntries.length) return;
+
+    emitDocumentChange(persistedEntries[persistedEntries.length - 1]);
+    hasHydratedPersistedDocument.current = true;
+  }, [entries, emitDocumentChange]);
+
+  useEffect(() => {
     if (!DETAIL_STORAGE_AVAILABLE) {
       return;
     }
@@ -206,6 +259,24 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
         persistDetailSnapshot(entry);
       }
     });
+  }, [entries]);
+
+  useEffect(() => {
+    if (!DETAIL_STORAGE_AVAILABLE) return;
+
+    try {
+      if (!entries.length) {
+        window.localStorage.removeItem(ENTRY_STORAGE_KEY);
+        return;
+      }
+
+      const serializable: PersistedUploadEntry[] = entries.map(({ file, binFile, ...persistable }) => ({
+        ...persistable,
+      }));
+      window.localStorage.setItem(ENTRY_STORAGE_KEY, JSON.stringify(serializable));
+    } catch (error) {
+      console.warn("Failed to persist uploads.", error);
+    }
   }, [entries]);
 
   // Open the per-document detail page, falling back to same-tab navigation.
@@ -227,7 +298,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
       let currentEntry: UploadEntry = entry;
       let computedBinHash: string | null = entry.binHash ?? null;
       let binFile: File | null = entry.binFile ?? null;
-      let binFileName = entry.binFileName ?? deriveBinFileName(file.name);
+      let binFileName = entry.binFileName ?? deriveBinFileName(entry.fileName);
 
       // Apply entry updates, update state, and optionally notify parents.
       const syncEntry = (updates: Partial<UploadEntry>, notify = false) => {
@@ -259,6 +330,11 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
 
       if (!wallet) {
         finalizeWithError("Please connect your wallet.");
+        return;
+      }
+
+      if (!file) {
+        finalizeWithError("Original PDF unavailable. Please upload the document again.");
         return;
       }
 
@@ -302,7 +378,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
           {
             checksum,
             binHash: hash,
-            binFile: binFile ?? undefined,
+            binFile: binFile ?? null,
             binFileName,
           },
           true,
@@ -405,12 +481,16 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
       const preparedEntries = accepted.map((file) => ({
         id: nanoid(),
         file,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
         progress: 0,
         status: "idle" as UploadStatus,
         uploadedAt: new Date().toISOString(),
         transactionStatus: "idle" as FileUploadDocumentChange["transactionStatus"],
+        binFile: null,
         binFileName: deriveBinFileName(file.name),
-      }));
+      } satisfies UploadEntry));
 
       setEntries((prev) => [...prev, ...preparedEntries]);
 
@@ -514,7 +594,10 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
           multiple
           accept={ACCEPTED_TYPES.join(",")}
           className="hidden"
-          onChange={(event) => stageEntries(event.target.files)}
+          onChange={(event) => {
+            stageEntries(event.target.files);
+            event.target.value = "";
+          }}
         />
 
         {!!entries.length && (
@@ -546,10 +629,10 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
                   <div className="flex-1 space-y-2">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0 flex-1 space-y-1">
-                        <p className="truncate text-sm font-medium">{entry.file.name}</p>
+                        <p className="truncate text-sm font-medium">{entry.fileName}</p>
                         <p className="text-xs text-muted-foreground">
                           Uploaded {new Date(entry.uploadedAt).toLocaleString()} ·{" "}
-                          {formatBytes(entry.file.size)}
+                          {formatBytes(entry.fileSize)}
                         </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground">
