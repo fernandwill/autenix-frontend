@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, FileText, Loader2, ShieldCheck } from "lucide-react";
 
@@ -21,7 +21,7 @@ const loadSnapshot = (id: string): DocumentDetailSnapshot | null => {
   }
 };
 
-type MetaItem = { label: string; value: string; mono?: boolean };
+type MetaItem = { label: string; value: ReactNode; mono?: boolean };
 
 const STATUS_VISUALS = {
   success: {
@@ -85,7 +85,19 @@ export function DocumentDetailPage() {
           { label: "Binary hash", value: snapshot.binHash ?? "Calculating...", mono: true },
           {
             label: "Transaction hash",
-            value: snapshot.transactionHash ?? "Awaiting confirmation...",
+            value:
+              snapshot.transactionUrl && snapshot.transactionHash ? (
+                <a
+                  href={snapshot.transactionUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary underline underline-offset-2"
+                >
+                  {snapshot.transactionHash}
+                </a>
+              ) : (
+                snapshot.transactionHash ?? "Awaiting confirmation..."
+              ),
             mono: true,
           },
         ],
@@ -161,7 +173,7 @@ export function DocumentDetailPage() {
                   {items.map(({ label, value, mono }) => (
                     <div key={label}>
                       <span className={labelClass}>{label}</span>
-                      <p className={mono ? monoValueClass : defaultValueClass}>{value}</p>
+                      <div className={mono ? monoValueClass : defaultValueClass}>{value}</div>
                     </div>
                   ))}
                 </div>

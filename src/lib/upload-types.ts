@@ -13,6 +13,7 @@ export type DocumentDetailSnapshot = {
   binHash: string | null;
   binFileName: string | null;
   transactionHash: string | null;
+  transactionUrl: string | null;
   error: string | null;
 };
 
