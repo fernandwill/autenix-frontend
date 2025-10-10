@@ -8,6 +8,7 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./index.css";
 import { SolanaWalletProvider } from "@/lib/solana/wallet-context";
+import { ThemeProvider } from "@/lib/theme-provider";
 
 const queryClient = new QueryClient();
 
@@ -16,7 +17,9 @@ createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <SolanaWalletProvider>
-          <App />
+          <ThemeProvider>
+            <App />
+          </ThemeProvider>
         </SolanaWalletProvider>
       </BrowserRouter>
     </QueryClientProvider>
