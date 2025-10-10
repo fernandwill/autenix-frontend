@@ -137,19 +137,22 @@ export function getUpdateNotarizationInstruction({
 // Convert a 32-byte hex string into the binary hash representation required by the program.
 export function documentHashFromHex(hex: string): Uint8Array {
   const normalized = hex.trim().toLowerCase();
-  if (normalized.length !== DOCUMENT_HASH_BYTE_LENGTH * 2) {
-    throw new Error(`Document hash must be ${DOCUMENT_HASH_BYTE_LENGTH * 2} hex characters.`);
-  }
-  if (!/^[0-9a-f]+$/.test(normalized)) {
+  const expectedLength = DOCUMENT_HASH_BYTE_LENGTH * 2;
+
+  /*
+   * Normalize the input, validate both the length and hexadecimal characters, then
+   * convert each pair of hex digits into its byte representation for the program.
+   */
+  if (!new RegExp(`^[0-9a-f]{${expectedLength}}$`).test(normalized)) {
+    if (normalized.length !== expectedLength) {
+      throw new Error(`Document hash must be ${expectedLength} hex characters.`);
+    }
     throw new Error("Document hash must be a valid hexadecimal string.");
   }
 
-  const bytes = new Uint8Array(DOCUMENT_HASH_BYTE_LENGTH);
-  for (let i = 0; i < normalized.length; i += 2) {
-    const byte = Number.parseInt(normalized.slice(i, i + 2), 16);
-    bytes[i / 2] = byte;
-  }
-  return bytes;
+  return Uint8Array.from(
+    normalized.match(/.{2}/g)!.map((byte) => Number.parseInt(byte, 16))
+  );
 }
 
 // Guard that a numeric field fits into an unsigned 8-bit slot.
