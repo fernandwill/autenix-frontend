@@ -42,6 +42,8 @@ const STATUS_VISUALS = {
   },
 } as const;
 
+const formatVersion = (value: number | null) => (value ?? "Not set").toString();
+
 // DocumentDetailPage renders the persisted upload metadata for a specific entry.
 export function DocumentDetailPage() {
   const { entryId } = useParams<{ entryId: string }>();
@@ -77,6 +79,7 @@ export function DocumentDetailPage() {
           { label: "File name", value: snapshot.fileName },
           { label: "Size", value: snapshot.sizeLabel },
           { label: "Status", value: snapshot.statusLabel },
+          { label: "Version", value: formatVersion(snapshot.version) },
         ],
         [
           { label: "Uploaded at", value: snapshot.uploadedAtLabel },

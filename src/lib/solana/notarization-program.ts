@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { getProgramDerivedAddress, getAddressEncoder, type ProgramDerivedAddress } from "@solana/addresses";
 import { AccountRole, type Instruction } from "@solana/instructions";
 import type { Address } from "gill";
@@ -30,8 +29,8 @@ export async function findNotarizationPda({
   version
 }: {
   notary: Address,
-  documentHash: any,
-  version: any
+  documentHash: Uint8Array,
+  version: Uint8Array
 }): Promise<ProgramDerivedAddress<Address<string>>> {
   if (documentHash.length !== DOCUMENT_HASH_BYTE_LENGTH) {
     throw new Error(`Document hash must be ${DOCUMENT_HASH_BYTE_LENGTH} bytes.`);
