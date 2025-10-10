@@ -10,14 +10,18 @@ import { buildDetailStorageKey } from "@/lib/upload-types";
 const loadSnapshot = (id: string): DocumentDetailSnapshot | null => {
   if (typeof window === "undefined") return null;
 
+  const stored = window.localStorage.getItem(buildDetailStorageKey(id));
+  if (!stored) return null;
+
   try {
-    const stored = window.localStorage.getItem(buildDetailStorageKey(id));
-    return stored ? (JSON.parse(stored) as DocumentDetailSnapshot) : null;
+    return JSON.parse(stored) as DocumentDetailSnapshot;
   } catch (error) {
     console.warn("Unable to read stored document snapshot.", error);
     return null;
   }
 };
+
+type MetaItem = { label: string; value: string; mono?: boolean };
 
 const STATUS_VISUALS = {
   success: {
@@ -63,6 +67,30 @@ export function DocumentDetailPage() {
     ? STATUS_VISUALS[snapshot.status as keyof typeof STATUS_VISUALS] ?? STATUS_VISUALS.default
     : null;
   const statusIconClass = snapshot?.status === "converting" ? "h-4 w-4 animate-spin" : "h-4 w-4";
+
+  const monoValueClass = "mt-1 font-mono text-sm text-slate-800";
+  const defaultValueClass = "mt-1 font-medium text-slate-900";
+  const labelClass = "text-xs font-semibold uppercase tracking-wider text-slate-400";
+  const metaColumns: MetaItem[][] | null = snapshot
+    ? [
+        [
+          { label: "File name", value: snapshot.fileName },
+          { label: "Size", value: snapshot.sizeLabel },
+          { label: "Status", value: snapshot.statusLabel },
+        ],
+        [
+          { label: "Uploaded at", value: snapshot.uploadedAtLabel },
+          { label: "Checksum", value: snapshot.checksum ?? "Calculating...", mono: true },
+          { label: "Binary file", value: snapshot.binFileName ?? "Generating...", mono: true },
+          { label: "Binary hash", value: snapshot.binHash ?? "Calculating...", mono: true },
+          {
+            label: "Transaction hash",
+            value: snapshot.transactionHash ?? "Awaiting confirmation...",
+            mono: true,
+          },
+        ],
+      ]
+    : null;
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -128,64 +156,16 @@ export function DocumentDetailPage() {
             </div>
 
             <div className="grid gap-6 px-8 py-10 md:grid-cols-2">
-              <div className="space-y-4">
-                <div>
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                    File name
-                  </span>
-                  <p className="mt-1 font-medium text-slate-900">{snapshot.fileName}</p>
+              {metaColumns?.map((items, columnIndex) => (
+                <div key={columnIndex} className="space-y-4">
+                  {items.map(({ label, value, mono }) => (
+                    <div key={label}>
+                      <span className={labelClass}>{label}</span>
+                      <p className={mono ? monoValueClass : defaultValueClass}>{value}</p>
+                    </div>
+                  ))}
                 </div>
-                <div>
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Size</span>
-                  <p className="mt-1 font-medium text-slate-900">{snapshot.sizeLabel}</p>
-                </div>
-                <div>
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                    Status
-                  </span>
-                  <p className="mt-1 font-medium text-slate-900">{snapshot.statusLabel}</p>
-                </div>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                    Uploaded at
-                  </span>
-                  <p className="mt-1 font-medium text-slate-900">{snapshot.uploadedAtLabel}</p>
-                </div>
-                <div>
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                    Checksum
-                  </span>
-                  <p className="mt-1 font-mono text-sm text-slate-800">
-                    {snapshot.checksum ?? "Calculating..."}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                    Binary file
-                  </span>
-                  <p className="mt-1 font-mono text-sm text-slate-800">
-                    {snapshot.binFileName ?? "Generating..."}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                    Binary hash
-                  </span>
-                  <p className="mt-1 font-mono text-sm text-slate-800">
-                    {snapshot.binHash ?? "Calculating..."}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                    Transaction hash
-                  </span>
-                  <p className="mt-1 font-mono text-sm text-slate-800">
-                    {snapshot.transactionHash ?? "Awaiting confirmation..."}
-                  </p>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         ) : (
