@@ -24,7 +24,8 @@ export type FileUploadDocumentChange = {
   id: string;
   timestamp: string;
   checksum: string | null;
-  hash: string | null;
+  binHash: string | null;
+  binFileName: string | null;
   transactionHash: string | null;
   transactionStatus: "idle" | "pending" | "confirmed" | "cancelled" | "error";
   error?: string | null;
@@ -41,9 +42,11 @@ interface UploadEntry {
   status: UploadStatus;
   uploadedAt: string;
   checksum?: string;
-  hash?: string;
+  binHash?: string;
+  binFile?: File;
+  binFileName?: string;
   error?: string;
-  transactionSignature?: string;
+  transactionHash?: string;
   transactionStatus?: FileUploadDocumentChange["transactionStatus"];
   transactionError?: string;
 }
@@ -58,6 +61,11 @@ const isPdfFile = (file: File) =>
 
 const DETAIL_STORAGE_AVAILABLE = typeof window !== "undefined" && "localStorage" in window;
 
+const deriveBinFileName = (fileName: string) => {
+  const trimmed = fileName.replace(/\.pdf$/i, "");
+  return `${trimmed}.bin`;
+};
+
 // Transform raw byte counts into a human readable label (e.g. "2.5 MB").
 const formatBytes = (bytes: number) => {
   if (!bytes) return "0 B";
@@ -70,7 +78,7 @@ const formatBytes = (bytes: number) => {
 const STATUS_META: Record<UploadStatus | "default", { label: string; description: string }> = {
   success: {
     label: "Converted",
-    description: "Your document has been notarized and its hash is ready to be published on-chain.",
+    description: "Your document has been notarized and its binary hash is ready to be published on-chain.",
   },
   converting: {
     label: "Converting",
@@ -108,7 +116,9 @@ const createDetailSnapshot = (entry: UploadEntry): DocumentDetailSnapshot => {
     statusLabel: label,
     statusDescription: description,
     checksum: entry.checksum ?? null,
-    hash: entry.hash ?? null,
+    binHash: entry.binHash ?? null,
+    binFileName: entry.binFileName ?? entry.binFile?.name ?? null,
+    transactionHash: entry.transactionHash ?? null,
     error: entry.error ?? null,
   };
 };
@@ -174,8 +184,9 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
         id: entry.id,
         timestamp: entry.uploadedAt,
         checksum: entry.checksum ?? null,
-        hash: entry.hash ?? null,
-        transactionHash: entry.transactionSignature ?? null,
+        binHash: entry.binHash ?? null,
+        binFileName: entry.binFileName ?? entry.binFile?.name ?? null,
+        transactionHash: entry.transactionHash ?? null,
         transactionStatus: entry.transactionStatus ?? "idle",
         error: entry.transactionError ?? entry.error ?? null,
       });
@@ -213,7 +224,9 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
     async (entry: UploadEntry) => {
       const { id, file } = entry;
       let currentEntry: UploadEntry = entry;
-      let computedHash: string | null = entry.hash ?? null;
+      let computedBinHash: string | null = entry.binHash ?? null;
+      let binFile: File | null = entry.binFile ?? null;
+      let binFileName = entry.binFileName ?? deriveBinFileName(file.name);
 
       // Apply entry updates, update state, and optionally notify parents.
       const syncEntry = (updates: Partial<UploadEntry>, notify = false) => {
@@ -265,9 +278,33 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
       }
 
       try {
+        if (!binFile) {
+          try {
+            binFile = new File([fileBuffer], binFileName, {
+              type: "application/octet-stream",
+            });
+            binFileName = binFile.name;
+          } catch (conversionError) {
+            const message =
+              conversionError instanceof Error
+                ? conversionError.message
+                : "Unable to convert the PDF into a binary document.";
+            finalizeWithError(message);
+            return;
+          }
+        }
+
         const { checksum, hash } = await computeDigestsFromBuffer(fileBuffer);
-        computedHash = hash;
-        syncEntry({ checksum, hash }, true);
+        computedBinHash = hash;
+        syncEntry(
+          {
+            checksum,
+            binHash: hash,
+            binFile: binFile ?? undefined,
+            binFileName,
+          },
+          true,
+        );
       } catch (digestError) {
         console.warn("Failed to compute file digests.", digestError);
       }
@@ -282,12 +319,12 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
           true,
         );
 
-        const documentHashHex = computedHash ?? currentEntry.hash ?? null;
+        const documentHashHex = computedBinHash ?? currentEntry.binHash ?? null;
         if (!documentHashHex) {
           syncEntry(
             {
               transactionStatus: "error",
-              transactionError: "Document hash unavailable. Unable to submit notarization.",
+              transactionError: "Binary hash unavailable. Unable to submit notarization.",
             },
             true,
           );
@@ -299,12 +336,12 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
             client,
             wallet,
             documentHashHex,
-            documentName: currentEntry.file.name,
+            documentName: currentEntry.binFileName ?? binFileName,
           });
 
           syncEntry(
             {
-              transactionSignature: signature,
+              transactionHash: signature,
               transactionStatus: "confirmed",
               transactionError: undefined,
             },
@@ -370,6 +407,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
         status: "idle" as UploadStatus,
         uploadedAt: new Date().toISOString(),
         transactionStatus: "idle" as FileUploadDocumentChange["transactionStatus"],
+        binFileName: deriveBinFileName(file.name),
       }));
 
       setEntries((prev) => [...prev, ...preparedEntries]);
@@ -430,8 +468,8 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
       <CardHeader className="text-center">
         <CardTitle className="text-2xl">Hash notarized PDFs for on-chain verification</CardTitle>
         <CardDescription>
-          Upload a notarized PDF. Conversion starts immediately and preserves the document hash for
-          smart-contract ingestion.
+          Upload a notarized PDF. Conversion starts immediately and preserves the binary document hash
+          for smart-contract ingestion.
         </CardDescription>
       </CardHeader>
 
@@ -538,27 +576,33 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
                           {entry.checksum ?? "Calculating..."}
                         </span>
                       </p>
+                      {entry.binFileName ? (
+                        <p className="break-all">
+                          Binary file:{" "}
+                          <span className="font-mono">{entry.binFileName}</span>
+                        </p>
+                      ) : null}
                       <p className="break-all">
-                        Hash:{" "}
+                        Binary hash:{" "}
                         <span className="font-mono">
-                          {entry.hash ?? "Calculating..."}
+                          {entry.binHash ?? "Calculating..."}
                         </span>
                       </p>
                     </div>
 
                     {entry.status === "success" ? (
                       <p className="text-xs text-muted-foreground">
-                        Conversion complete. The document hash is ready for smart-contract submission.
+                        Conversion complete. The binary hash is ready for smart-contract submission.
                       </p>
                     ) : null}
 
                     {entry.transactionStatus === "pending" ? (
                       <p className="text-xs text-muted-foreground">Awaiting wallet confirmation...</p>
                     ) : null}
-                    {entry.transactionStatus === "confirmed" && entry.transactionSignature ? (
+                    {entry.transactionStatus === "confirmed" && entry.transactionHash ? (
                       <p className="text-xs text-muted-foreground">
                         Transaction hash:{" "}
-                        <span className="break-all font-mono">{entry.transactionSignature}</span>
+                        <span className="break-all font-mono">{entry.transactionHash}</span>
                       </p>
                     ) : null}
                     {entry.transactionStatus === "cancelled" ? (

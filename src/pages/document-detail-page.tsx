@@ -105,7 +105,7 @@ export function DocumentDetailPage() {
 
                   <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
                     <ShieldCheck className="h-4 w-4" />
-                    Only the document hash is retained for on-chain verification
+                    Only the binary hash is retained for on-chain verification
                   </span>
                 </div>
 
@@ -163,10 +163,26 @@ export function DocumentDetailPage() {
                 </div>
                 <div>
                   <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    Binary file
+                  </span>
+                  <p className="mt-1 font-mono text-sm text-slate-800">
+                    {snapshot.binFileName ?? "Generating..."}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    Binary hash
+                  </span>
+                  <p className="mt-1 font-mono text-sm text-slate-800">
+                    {snapshot.binHash ?? "Calculating..."}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                     Transaction hash
                   </span>
                   <p className="mt-1 font-mono text-sm text-slate-800">
-                    {snapshot.hash ?? "Calculating..."}
+                    {snapshot.transactionHash ?? "Awaiting confirmation..."}
                   </p>
                 </div>
               </div>
