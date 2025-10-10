@@ -140,6 +140,11 @@ function enhanceSendError(error: unknown): Error {
     details.push(`RPC message: ${simulationMessage}`);
   }
 
+  const simulationDetails = extractSimulationErrorDetails(error);
+  if (simulationDetails) {
+    details.push(`Simulation error details: ${simulationDetails}`);
+  }
+
   if (logs.length) {
     details.push(`Simulation logs:\n${logs.join("\n")}`);
   }
@@ -154,6 +159,10 @@ function enhanceSendError(error: unknown): Error {
 }
 
 function extractSimulationMessage(error: unknown): string | null {
+  return extractSimulationMessageInternal(error, new Set());
+}
+
+function extractSimulationMessageInternal(error: unknown, visited: Set<unknown>): string | null {
   if (!error) {
     return null;
   }
@@ -163,55 +172,210 @@ function extractSimulationMessage(error: unknown): string | null {
   }
 
   if (error instanceof Error) {
-    return error.message;
-  }
-
-  if (typeof error === "object") {
-    const messageCandidate = (error as { message?: unknown }).message;
-    if (typeof messageCandidate === "string") {
-      return messageCandidate;
+    const transactionMessage = extractSimulationMessageInternal(
+      (error as { transactionError?: unknown }).transactionError,
+      visited,
+    );
+    if (transactionMessage) {
+      return transactionMessage;
     }
 
-    const causeCandidate = (error as { cause?: unknown }).cause;
-    const causeMessage = extractSimulationMessage(causeCandidate);
+    const causeMessage = extractSimulationMessageInternal(error.cause, visited);
     if (causeMessage) {
       return causeMessage;
     }
 
-    const valueCandidate = (error as { value?: unknown }).value;
-    if (valueCandidate) {
-      return extractSimulationMessage(valueCandidate);
-    }
+    return error.message;
+  }
+
+  if (typeof error !== "object") {
+    return null;
+  }
+
+  if (visited.has(error)) {
+    return null;
+  }
+  visited.add(error);
+
+  const messageCandidate = (error as { message?: unknown }).message;
+  const message = extractSimulationMessageInternal(messageCandidate, visited);
+  if (message) {
+    return message;
+  }
+
+  const transactionErrorCandidate = (error as { transactionError?: unknown }).transactionError;
+  const transactionMessage = extractSimulationMessageInternal(transactionErrorCandidate, visited);
+  if (transactionMessage) {
+    return transactionMessage;
+  }
+
+  const errCandidate = (error as { err?: unknown }).err;
+  const errMessage = formatSimulationError(errCandidate);
+  if (errMessage) {
+    return errMessage;
+  }
+
+  const dataCandidate = (error as { data?: unknown }).data;
+  const dataMessage = extractSimulationMessageInternal(dataCandidate, visited);
+  if (dataMessage) {
+    return dataMessage;
+  }
+
+  const valueCandidate = (error as { value?: unknown }).value;
+  const valueMessage = extractSimulationMessageInternal(valueCandidate, visited);
+  if (valueMessage) {
+    return valueMessage;
+  }
+
+  const causeCandidate = (error as { cause?: unknown }).cause;
+  if (causeCandidate) {
+    return extractSimulationMessageInternal(causeCandidate, visited);
   }
 
   return null;
 }
 
 function extractSimulationLogs(error: unknown): string[] {
-  if (!error || typeof error !== "object") {
-    return [];
+  const logs = new Set<string>();
+  collectSimulationLogs(error, logs, new Set());
+  return Array.from(logs);
+}
+
+function collectSimulationLogs(value: unknown, logs: Set<string>, visited: Set<unknown>) {
+  if (!value || typeof value !== "object") {
+    return;
   }
 
-  const logsCandidate = (error as { logs?: unknown }).logs;
+  if (visited.has(value)) {
+    return;
+  }
+  visited.add(value);
+
+  const logsCandidate = (value as { logs?: unknown }).logs;
   if (Array.isArray(logsCandidate)) {
-    return logsCandidate.filter((log): log is string => typeof log === "string");
+    logsCandidate.forEach((log) => {
+      if (typeof log === "string") {
+        logs.add(log);
+      }
+    });
+  }
+
+  const transactionErrorCandidate = (value as { transactionError?: unknown }).transactionError;
+  if (transactionErrorCandidate) {
+    collectSimulationLogs(transactionErrorCandidate, logs, visited);
+  }
+
+  const dataCandidate = (value as { data?: unknown }).data;
+  if (dataCandidate) {
+    collectSimulationLogs(dataCandidate, logs, visited);
+  }
+
+  const valueCandidate = (value as { value?: unknown }).value;
+  if (valueCandidate) {
+    collectSimulationLogs(valueCandidate, logs, visited);
+  }
+
+  const causeCandidate = (value as { cause?: unknown }).cause;
+  if (causeCandidate) {
+    collectSimulationLogs(causeCandidate, logs, visited);
+  }
+}
+
+function extractSimulationErrorDetails(error: unknown): string | null {
+  return extractSimulationErrorDetailsInternal(error, new Set());
+}
+
+function extractSimulationErrorDetailsInternal(error: unknown, visited: Set<unknown>): string | null {
+  if (!error || typeof error !== "object") {
+    return null;
+  }
+
+  if (visited.has(error)) {
+    return null;
+  }
+  visited.add(error);
+
+  const errCandidate = (error as { err?: unknown }).err;
+  const errMessage = formatSimulationError(errCandidate);
+  if (errMessage) {
+    return errMessage;
+  }
+
+  const transactionErrorCandidate = (error as { transactionError?: unknown }).transactionError;
+  const transactionMessage = extractSimulationErrorDetailsInternal(transactionErrorCandidate, visited);
+  if (transactionMessage) {
+    return transactionMessage;
+  }
+
+  const dataCandidate = (error as { data?: unknown }).data;
+  const dataMessage = extractSimulationErrorDetailsInternal(dataCandidate, visited);
+  if (dataMessage) {
+    return dataMessage;
+  }
+
+  const valueCandidate = (error as { value?: unknown }).value;
+  const valueMessage = extractSimulationErrorDetailsInternal(valueCandidate, visited);
+  if (valueMessage) {
+    return valueMessage;
   }
 
   const causeCandidate = (error as { cause?: unknown }).cause;
   if (causeCandidate) {
-    const logs = extractSimulationLogs(causeCandidate);
-    if (logs.length) {
-      return logs;
+    return extractSimulationErrorDetailsInternal(causeCandidate, visited);
+  }
+
+  return null;
+}
+
+function formatSimulationError(err: unknown): string | null {
+  if (err == null) {
+    return null;
+  }
+
+  if (typeof err === "string") {
+    return err;
+  }
+
+  if (typeof err === "number") {
+    return err.toString();
+  }
+
+  if (Array.isArray(err)) {
+    return err
+      .map((entry) => formatSimulationError(entry))
+      .filter((entry): entry is string => Boolean(entry))
+      .join(", ");
+  }
+
+  if (typeof err === "object") {
+    if ("InstructionError" in err) {
+      const instructionError = (err as { InstructionError?: unknown }).InstructionError;
+      if (Array.isArray(instructionError) && instructionError.length >= 2) {
+        const [index, detail] = instructionError;
+        const detailMessage = formatSimulationError(detail);
+        const prefix = typeof index === "number" ? `instruction ${index}` : "instruction";
+        if (detailMessage) {
+          return `Error processing ${prefix}: ${detailMessage}`;
+        }
+        return `Error processing ${prefix}`;
+      }
+    }
+
+    if ("Custom" in err && typeof (err as { Custom?: unknown }).Custom === "number") {
+      const code = (err as { Custom: number }).Custom;
+      return `custom program error: 0x${code.toString(16)}`;
+    }
+
+    if ("message" in err && typeof (err as { message?: unknown }).message === "string") {
+      return (err as { message: string }).message;
+    }
+
+    try {
+      return JSON.stringify(err);
+    } catch (jsonError) {
+      console.warn("Unable to stringify simulation error details.", jsonError);
     }
   }
 
-  const valueCandidate = (error as { value?: unknown }).value;
-  if (valueCandidate && typeof valueCandidate === "object") {
-    const errCandidate = (valueCandidate as { err?: unknown; logs?: unknown }).logs;
-    if (Array.isArray(errCandidate)) {
-      return errCandidate.filter((log): log is string => typeof log === "string");
-    }
-  }
-
-  return [];
+  return null;
 }
