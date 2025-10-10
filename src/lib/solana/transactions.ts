@@ -132,15 +132,22 @@ function enhanceSendError(error: unknown): Error {
 
   const logs = extractSimulationLogs(error);
   const simulationMessage = extractSimulationMessage(error);
-  const guidance =
-    "Transaction simulation failed. Ensure your wallet has enough SOL on the selected network and try again.";
+  const normalizedSimulationMessage = simulationMessage
+    ? normalizeSimulationMessage(simulationMessage)
+    : null;
+  const simulationDetails = extractSimulationErrorDetails(error);
+  const guidance = deriveSimulationGuidance({
+    simulationMessage: normalizedSimulationMessage ?? simulationMessage,
+    simulationDetails,
+    logs,
+  });
   const details: string[] = [guidance];
 
-  if (simulationMessage && !simulationMessage.toLowerCase().includes(guidance.toLowerCase())) {
-    details.push(`RPC message: ${simulationMessage}`);
+  const rpcMessageToReport = normalizedSimulationMessage ?? simulationMessage;
+  if (rpcMessageToReport && !guidance.toLowerCase().includes(rpcMessageToReport.toLowerCase())) {
+    details.push(`RPC message: ${rpcMessageToReport}`);
   }
 
-  const simulationDetails = extractSimulationErrorDetails(error);
   if (simulationDetails) {
     details.push(`Simulation error details: ${simulationDetails}`);
   }
@@ -156,6 +163,78 @@ function enhanceSendError(error: unknown): Error {
     (enhancedError as { cause?: unknown }).cause = error;
   }
   return enhancedError;
+}
+
+type SimulationGuidanceContext = {
+  simulationMessage: string | null | undefined;
+  simulationDetails: string | null;
+  logs: string[];
+};
+
+function deriveSimulationGuidance({ simulationMessage, simulationDetails, logs }: SimulationGuidanceContext): string {
+  const haystack = [simulationMessage, simulationDetails, ...logs]
+    .filter((value): value is string => Boolean(value))
+    .join(" ")
+    .toLowerCase();
+
+  if (/insufficient funds|insufficient lamports/.test(haystack)) {
+    return "Transaction simulation failed because the wallet does not have enough SOL to cover rent or fees on the selected network.";
+  }
+
+  const customProgramErrorCode =
+    extractCustomProgramErrorCode(simulationMessage) ?? extractCustomProgramErrorCode(simulationDetails);
+  if (customProgramErrorCode != null) {
+    return `Transaction simulation failed with custom program error #${customProgramErrorCode}. Review the RPC message and simulation logs for more details.`;
+  }
+
+  return "Transaction simulation failed while executing the notarization program. Review the RPC message and simulation logs for more information.";
+}
+
+function normalizeSimulationMessage(message: string): string {
+  const customProgramErrorCode = extractCustomProgramErrorCode(message);
+  if (customProgramErrorCode == null) {
+    return message;
+  }
+
+  const hexCode = `0x${customProgramErrorCode.toString(16)}`;
+  const decimalCode = `#${customProgramErrorCode}`;
+  const includesHex = message.toLowerCase().includes(hexCode.toLowerCase());
+  const includesDecimal = message.includes(decimalCode);
+
+  if (includesHex && includesDecimal) {
+    return message;
+  }
+
+  if (includesDecimal) {
+    return `${message} (${hexCode})`;
+  }
+
+  if (includesHex) {
+    return `${message} (${decimalCode})`;
+  }
+
+  return `custom program error: ${decimalCode} (${hexCode})`;
+}
+
+function extractCustomProgramErrorCode(message: string | null | undefined): number | null {
+  if (!message) {
+    return null;
+  }
+
+  const match = /custom program error:\s*(?:#([0-9]+)|0x([0-9a-f]+))/i.exec(message);
+  if (!match) {
+    return null;
+  }
+
+  if (match[1]) {
+    return Number.parseInt(match[1], 10);
+  }
+
+  if (match[2]) {
+    return Number.parseInt(match[2], 16);
+  }
+
+  return null;
 }
 
 function extractSimulationMessage(error: unknown): string | null {

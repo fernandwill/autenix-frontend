@@ -1,15 +1,19 @@
+type ProcessEnv = Record<string, string | undefined>;
+
 const globalWithProcess = globalThis as typeof globalThis & {
   process?: {
-    env?: Record<string, string | undefined>;
+    env?: ProcessEnv;
   };
   global?: typeof globalThis;
   Global?: typeof globalThis;
 };
 
 if (!globalWithProcess.process) {
-  globalWithProcess.process = { env: {} } as any;
+  const env: ProcessEnv = {};
+  globalWithProcess.process = { env };
 } else if (!globalWithProcess.process.env) {
-  globalWithProcess.process.env = {} as any;
+  const env: ProcessEnv = {};
+  globalWithProcess.process.env = env;
 }
 
 if (!globalWithProcess.global) {
