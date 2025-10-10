@@ -57,7 +57,7 @@ const isPdfFile = (file: File) =>
 
 const DETAIL_STORAGE_AVAILABLE = typeof window !== "undefined" && "localStorage" in window;
 
-// Pretty-print a byte count so users can see file sizes.
+// Transform raw byte counts into a human readable label (e.g. "2.5 MB").
 const formatBytes = (bytes: number) => {
   if (!bytes) return "0 B";
   const units = ["B", "KB", "MB", "GB"];
@@ -90,10 +90,9 @@ const getStatusDescription = (status: UploadStatus) => {
   }
 };
 
+// Prepare a snapshot of an upload entry for detail pages and storage.
 const createDetailSnapshot = (entry: UploadEntry): DocumentDetailSnapshot => {
   const uploadedAtLabel = entry.uploadedAt ? new Date(entry.uploadedAt).toLocaleString() : "Unavailable";
-  const statusLabel = getStatusLabel(entry.status);
-  const statusDescription = getStatusDescription(entry.status);
   return {
     id: entry.id,
     fileName: entry.file.name,
@@ -101,18 +100,17 @@ const createDetailSnapshot = (entry: UploadEntry): DocumentDetailSnapshot => {
     uploadedAt: entry.uploadedAt,
     uploadedAtLabel,
     status: entry.status,
-    statusLabel,
-    statusDescription,
+    statusLabel: getStatusLabel(entry.status),
+    statusDescription: getStatusDescription(entry.status),
     checksum: entry.checksum ?? null,
     hash: entry.hash ?? null,
     error: entry.error ?? null,
   };
 };
 
+// Save the entry snapshot so the detail page can be hydrated from localStorage.
 const persistDetailSnapshot = (entry: UploadEntry) => {
-  if (!DETAIL_STORAGE_AVAILABLE) {
-    return;
-  }
+  if (!DETAIL_STORAGE_AVAILABLE) return;
 
   try {
     const key = buildDetailStorageKey(entry.id);
@@ -123,11 +121,13 @@ const persistDetailSnapshot = (entry: UploadEntry) => {
   }
 };
 
+// Represent an array buffer as a hex string for hashes.
 const arrayBufferToHex = (buffer: ArrayBuffer) =>
   Array.from(new Uint8Array(buffer))
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
 
+// Compute the checksum/hash pair needed for notarization.
 const computeDigestsFromBuffer = async (buffer: ArrayBuffer) => {
   if (!crypto?.subtle) {
     throw new Error("Web Crypto API is not available.");
@@ -158,6 +158,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
     };
   }, [address, signTransaction]);
 
+  // Broadcast entry updates to the parent component.
   const emitDocumentChange = useCallback(
     (entry: UploadEntry) => {
       if (!onDocumentChange) return;
@@ -188,6 +189,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
     });
   }, [entries]);
 
+  // Open the per-document detail page, falling back to same-tab navigation.
   const openEntryDetails = useCallback((entry: UploadEntry) => {
     persistDetailSnapshot(entry);
 
@@ -204,25 +206,15 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
       const { id, file } = entry;
       let currentEntry: UploadEntry = entry;
 
-      const applyUpdates = (updates: Partial<UploadEntry>, options?: { notify?: boolean }) => {
+      // Apply entry updates, update state, and optionally notify parents.
+      const syncEntry = (updates: Partial<UploadEntry>, notify = false) => {
         currentEntry = { ...currentEntry, ...updates };
-        setEntries((prev) =>
-          prev.map((item) => (item.id === id ? currentEntry : item)),
-        );
-        if (options?.notify) {
-          emitDocumentChange(currentEntry);
-        }
-      };
-
-      const updateProgress = (progress: number) => {
-        currentEntry = { ...currentEntry, progress };
-        setEntries((prev) =>
-          prev.map((item) => (item.id === id ? currentEntry : item)),
-        );
+        setEntries((prev) => prev.map((item) => (item.id === id ? currentEntry : item)));
+        if (notify) emitDocumentChange(currentEntry);
       };
 
       const finalizeWithError = (message: string) => {
-        applyUpdates(
+        syncEntry(
           {
             status: "error",
             error: message,
@@ -230,19 +222,16 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
             transactionStatus: "error",
             transactionError: message,
           },
-          { notify: true },
+          true,
         );
       };
 
-      applyUpdates(
-        {
-          status: "converting",
-          progress: currentEntry.progress > 0 ? currentEntry.progress : 5,
-          error: undefined,
-          transactionError: undefined,
-        },
-        { notify: false },
-      );
+      syncEntry({
+        status: "converting",
+        progress: currentEntry.progress > 0 ? currentEntry.progress : 5,
+        error: undefined,
+        transactionError: undefined,
+      });
 
       if (!wallet) {
         finalizeWithError("Please connect your wallet.");
@@ -268,24 +257,18 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
 
       try {
         const { checksum, hash } = await computeDigestsFromBuffer(fileBuffer);
-        applyUpdates(
-          {
-            checksum,
-            hash,
-          },
-          { notify: true },
-        );
+        syncEntry({ checksum, hash }, true);
       } catch (digestError) {
         console.warn("Failed to compute file digests.", digestError);
       }
 
       const attemptTransactionSignature = async () => {
-        applyUpdates(
+        syncEntry(
           {
             transactionStatus: "pending",
             transactionError: undefined,
           },
-          { notify: true },
+          true,
         );
 
         const memoParts = [
@@ -302,13 +285,13 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
             memo,
           });
 
-          applyUpdates(
+          syncEntry(
             {
               transactionSignature: signature,
               transactionStatus: "confirmed",
               transactionError: undefined,
             },
-            { notify: true },
+            true,
           );
         } catch (error) {
           const rejectionCode = (error as { code?: number })?.code;
@@ -321,33 +304,33 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
             /reject/i.test(message);
 
           if (rejected) {
-            applyUpdates(
+            syncEntry(
               {
                 transactionStatus: "cancelled",
                 transactionError: undefined,
               },
-              { notify: true },
+              true,
             );
             return;
           }
 
-          applyUpdates(
+          syncEntry(
             {
               transactionStatus: "error",
               transactionError: message,
             },
-            { notify: true },
+            true,
           );
         }
       };
 
-      updateProgress(100);
-      applyUpdates(
+      syncEntry({ progress: 100 });
+      syncEntry(
         {
           status: "success",
           progress: 100,
         },
-        { notify: true },
+        true,
       );
 
       await attemptTransactionSignature();
@@ -357,14 +340,9 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
 
   const stageEntries = useCallback(
     (fileList: FileList | null) => {
-      if (!fileList?.length) return;
-
-      const accepted = Array.from(fileList).filter((file) => {
-        const typeAccepted = isPdfFile(file);
-        const sizeAccepted = file.size <= MAX_FILE_SIZE;
-        return typeAccepted && sizeAccepted;
-      });
-
+      const accepted = Array.from(fileList ?? []).filter(
+        (file) => isPdfFile(file) && file.size <= MAX_FILE_SIZE,
+      );
       if (!accepted.length) return;
 
       const preparedEntries = accepted.map((file) => ({
@@ -386,6 +364,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
     [convertEntry, emitDocumentChange],
   );
 
+  // Support drag-and-drop uploads as an alternative to the file picker.
   const onDrop = useCallback(
     (event: React.DragEvent<HTMLLabelElement>) => {
       event.preventDefault();
@@ -406,12 +385,12 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
     return "Conversion complete";
   }, [entries]);
 
-  // Removes a single entry.
+  // Remove a single entry from the list.
   const clearEntry = useCallback((id: string) => {
     setEntries((prev) => prev.filter((entry) => entry.id !== id));
   }, []);
 
-  // Clears the entire queue.
+  // Clear all entries.
   const clearAll = useCallback(() => {
     setEntries([]);
   }, []);
