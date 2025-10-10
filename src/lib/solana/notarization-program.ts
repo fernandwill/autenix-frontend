@@ -22,6 +22,7 @@ export type NotarizationSeeds = {
   notary: Address<string>;
 };
 
+// Derive the PDA that stores notarization data for a wallet/hash combination.
 export async function findNotarizationPda({
   documentHash,
   notary,
@@ -45,6 +46,7 @@ export type CreateNotarizationInstructionArgs = NotarizationSeeds & {
   notarizationAccount: Address<string>;
 };
 
+// Build the instruction payload that initializes a notarization account.
 export function getCreateNotarizationInstruction({
   documentHash,
   documentName,
@@ -87,6 +89,7 @@ export type UpdateNotarizationInstructionArgs = {
   hashVersion: number;
 };
 
+// Build the instruction payload that updates an existing notarization entry.
 export function getUpdateNotarizationInstruction({
   hashVersion,
   newDocumentHash,
@@ -128,6 +131,7 @@ export function getUpdateNotarizationInstruction({
   };
 }
 
+// Convert a 32-byte hex string into the binary hash representation required by the program.
 export function documentHashFromHex(hex: string): Uint8Array {
   const normalized = hex.trim().toLowerCase();
   if (normalized.length !== DOCUMENT_HASH_BYTE_LENGTH * 2) {
@@ -145,6 +149,7 @@ export function documentHashFromHex(hex: string): Uint8Array {
   return bytes;
 }
 
+// Guard that a numeric field fits into an unsigned 8-bit slot.
 export function ensureU8(value: number, label: string): number {
   if (!Number.isInteger(value) || value < 0 || value > 255) {
     throw new Error(`${label} must be an integer between 0 and 255.`);
@@ -154,6 +159,7 @@ export function ensureU8(value: number, label: string): number {
 
 const U32_BYTE_LENGTH = 4;
 
+// Encode a string with a little-endian u32 length prefix as expected by the program.
 function encodeStringWithLength(value: string): Uint8Array {
   const utf8 = textEncoder.encode(value);
   const buffer = new Uint8Array(U32_BYTE_LENGTH + utf8.length);
@@ -163,6 +169,7 @@ function encodeStringWithLength(value: string): Uint8Array {
   return buffer;
 }
 
+// Assemble the discriminator, hash, and metadata for the create instruction data blob.
 function encodeCreateNotarizationData({
   documentHash,
   documentName,
@@ -193,6 +200,7 @@ function encodeCreateNotarizationData({
   return data;
 }
 
+// Assemble the discriminator and field payload for the update instruction data blob.
 function encodeUpdateNotarizationData({
   oldDocumentHash,
   oldVersion,

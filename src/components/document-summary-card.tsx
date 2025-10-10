@@ -17,6 +17,7 @@ const formatTimestamp = (value?: string | null) => {
 // Surface checksum values while handling nullish content gracefully.
 const formatChecksum = (value?: string | null) => value ?? FALLBACK;
 
+// Provide human readable labels for binary file names or fallback when missing.
 const formatBinaryFile = (value?: string | null) => value ?? FALLBACK;
 
 const TRANSACTION_STATUS_LABELS: Partial<Record<FileUploadDocumentChange["transactionStatus"], string>> = {
