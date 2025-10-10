@@ -131,17 +131,60 @@ function enhanceSendError(error: unknown): Error {
   }
 
   const logs = extractSimulationLogs(error);
+  const simulationMessage = extractSimulationMessage(error);
   const guidance =
     "Transaction simulation failed. Ensure your wallet has enough SOL on the selected network and try again.";
-  const detailedMessage = logs.length
-    ? `${guidance}\nSimulation logs:\n${logs.join("\n")}`
-    : guidance;
+  const details: string[] = [guidance];
+
+  if (simulationMessage && !simulationMessage.toLowerCase().includes(guidance.toLowerCase())) {
+    details.push(`RPC message: ${simulationMessage}`);
+  }
+
+  if (logs.length) {
+    details.push(`Simulation logs:\n${logs.join("\n")}`);
+  }
+
+  const detailedMessage = details.join("\n\n");
 
   const enhancedError = new Error(detailedMessage);
   if (error instanceof Error) {
     (enhancedError as { cause?: unknown }).cause = error;
   }
   return enhancedError;
+}
+
+function extractSimulationMessage(error: unknown): string | null {
+  if (!error) {
+    return null;
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "object") {
+    const messageCandidate = (error as { message?: unknown }).message;
+    if (typeof messageCandidate === "string") {
+      return messageCandidate;
+    }
+
+    const causeCandidate = (error as { cause?: unknown }).cause;
+    const causeMessage = extractSimulationMessage(causeCandidate);
+    if (causeMessage) {
+      return causeMessage;
+    }
+
+    const valueCandidate = (error as { value?: unknown }).value;
+    if (valueCandidate) {
+      return extractSimulationMessage(valueCandidate);
+    }
+  }
+
+  return null;
 }
 
 function extractSimulationLogs(error: unknown): string[] {
