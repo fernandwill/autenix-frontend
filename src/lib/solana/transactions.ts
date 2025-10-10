@@ -316,6 +316,10 @@ function deriveSimulationGuidance({ simulationMessage, simulationDetails, logs }
   const customProgramErrorCode =
     extractCustomProgramErrorCode(simulationMessage) ?? extractCustomProgramErrorCode(simulationDetails);
 
+  if (customProgramErrorCode === 0 || /already (?:in use|exists)/.test(haystack)) {
+    return "Transaction simulation failed because a notarization account for this document already exists on-chain. This typically means the document has been notarized with this wallet and version. If you need to update it, increase the document version or revoke the previous notarization first.";
+  }
+
   if (customProgramErrorCode === 2006 || /seeds constraint/.test(haystack)) {
     return "Transaction simulation failed because the notarization account address derived from the wallet and document hash did not match the program's expected seeds. Double-check that the document hash is correct and that you're using the same wallet that originally created the notarization.";
   }
