@@ -7,29 +7,31 @@ interface DocumentSummaryCardProps {
 
 const FALLBACK = "N/A";
 
+// Present timestamp values or fall back when parsing fails.
 const formatTimestamp = (value?: string | null) => {
   if (!value) return FALLBACK;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? FALLBACK : date.toLocaleString();
 };
 
+// Surface checksum values while handling nullish content gracefully.
 const formatChecksum = (value?: string | null) => value ?? FALLBACK;
 
-const formatTransactionHash = (document: FileUploadDocumentChange | null) => {
-  if (!document) return FALLBACK;
-
-  switch (document.transactionStatus) {
-    case "pending":
-      return "Awaiting signature";
-    case "cancelled":
-      return "Signature cancelled";
-    case "error":
-      return document.error ?? "Signing failed";
-    default:
-      return document.transactionHash ?? FALLBACK;
-  }
+const TRANSACTION_STATUS_LABELS: Partial<Record<FileUploadDocumentChange["transactionStatus"], string>> = {
+  pending: "Awaiting signature",
+  cancelled: "Signature cancelled",
 };
 
+// Resolve the appropriate transaction hash label based on the document status.
+const formatTransactionHash = (document: FileUploadDocumentChange | null) => {
+  if (!document) return FALLBACK;
+  if (document.transactionStatus === "error") {
+    return document.error ?? "Signing failed";
+  }
+  return TRANSACTION_STATUS_LABELS[document.transactionStatus] ?? document.transactionHash ?? FALLBACK;
+};
+
+// DocumentSummaryCard highlights key metadata for the most recent upload.
 export function DocumentSummaryCard({ document }: DocumentSummaryCardProps) {
   const items = [
     {

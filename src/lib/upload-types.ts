@@ -16,4 +16,5 @@ export type DocumentDetailSnapshot = {
 
 export const DOCUMENT_DETAIL_STORAGE_PREFIX = "document-detail:";
 
+// Compose the localStorage key used to persist document details.
 export const buildDetailStorageKey = (id: string) => `${DOCUMENT_DETAIL_STORAGE_PREFIX}${id}`;
