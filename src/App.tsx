@@ -29,9 +29,6 @@ function HomePage() {
             </div>
             {/* Simple search control lets users query notarized artifacts by hash. */}
             <div className="rounded-lg border bg-card p-6 shadow-sm">
-              <Label htmlFor="document-hash-input" className="text-sm font-medium text-muted-foreground">
-                Enter document hash...
-              </Label>
               <div className="mt-3 flex flex-col gap-3 sm:flex-row">
                 <Input
                   id="document-hash-input"
