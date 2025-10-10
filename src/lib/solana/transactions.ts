@@ -96,6 +96,7 @@ export async function submitNotarizationTransaction({
   try {
     const signature = await client.sendAndConfirmTransaction(sendableTransaction, {
       commitment,
+      skipPreflight: true,
     });
 
     return {
