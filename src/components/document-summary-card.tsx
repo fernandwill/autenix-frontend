@@ -90,54 +90,56 @@ export function DocumentSummaryCard({ documents }: DocumentSummaryCardProps) {
       </CardHeader>
       <CardContent className="space-y-6 text-sm">
         {hasDocuments ? (
-          <ul className="space-y-5">
-            {sortedDocuments.map((document) => {
-              const items: { label: string; value: ReactNode }[] = [
-                { label: "Status", value: formatTransactionStatus(document) },
-                { label: "Timestamp", value: formatTimestamp(document.timestamp) },
-                { label: "Version", value: formatVersion(document.version) },
-                { label: "Checksum", value: formatChecksum(document.checksum) },
-                { label: "Binary File", value: formatBinaryFile(document.binFileName) },
-                { label: "Binary Hash", value: formatChecksum(document.binHash) },
-                { label: "Transaction Hash", value: formatTransactionHash(document) },
-              ];
+          <div className="max-h-[32rem] space-y-5 overflow-y-auto pr-1">
+            <ul className="space-y-5">
+              {sortedDocuments.map((document) => {
+                const items: { label: string; value: ReactNode }[] = [
+                  { label: "Status", value: formatTransactionStatus(document) },
+                  { label: "Timestamp", value: formatTimestamp(document.timestamp) },
+                  { label: "Version", value: formatVersion(document.version) },
+                  { label: "Checksum", value: formatChecksum(document.checksum) },
+                  { label: "Binary File", value: formatBinaryFile(document.binFileName) },
+                  { label: "Binary Hash", value: formatChecksum(document.binHash) },
+                  { label: "Transaction Hash", value: formatTransactionHash(document) },
+                ];
 
-              return (
-                <li
-                  key={document.id}
-                  className="rounded-lg border border-muted bg-card/40 p-4 shadow-sm"
-                >
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="text-base font-semibold text-foreground">
-                        {document.fileName || UNTITLED}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Uploaded {formatTimestamp(document.timestamp)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 space-y-4">
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      {items.map(({ label, value }) => (
-                        <div key={label}>
-                          <p className="text-xs font-medium uppercase text-muted-foreground">{label}</p>
-                          <div className="mt-1 break-all font-mono text-foreground">{value}</div>
-                        </div>
-                      ))}
+                return (
+                  <li
+                    key={document.id}
+                    className="rounded-lg border border-muted bg-card/40 p-4 shadow-sm"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-base font-semibold text-foreground">
+                          {document.fileName || UNTITLED}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Uploaded {formatTimestamp(document.timestamp)}
+                        </p>
+                      </div>
                     </div>
 
-                    <div className="flex justify-end">
-                      <Button asChild size="sm" variant="outline">
-                        <Link to={`/documents/${document.id}`}>View Details</Link>
-                      </Button>
+                    <div className="mt-4 space-y-4">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        {items.map(({ label, value }) => (
+                          <div key={label}>
+                            <p className="text-xs font-medium uppercase text-muted-foreground">{label}</p>
+                            <div className="mt-1 break-all font-mono text-foreground">{value}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex justify-end">
+                        <Button asChild size="sm" variant="outline">
+                          <Link to={`/documents/${document.id}`}>View Details</Link>
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         ) : (
           <div className="rounded-lg border border-dashed border-muted-foreground/40 p-6 text-center text-sm text-muted-foreground">
             Upload a document to see its notarization progress and metadata here.
