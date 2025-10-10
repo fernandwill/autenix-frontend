@@ -68,8 +68,8 @@ export function DocumentDetailPage() {
     : null;
   const statusIconClass = snapshot?.status === "converting" ? "h-4 w-4 animate-spin" : "h-4 w-4";
 
-  const monoValueClass = "mt-1 font-mono text-sm text-slate-800";
-  const defaultValueClass = "mt-1 font-medium text-slate-900";
+  const monoValueClass = "mt-1 break-all font-mono text-sm text-slate-800";
+  const defaultValueClass = "mt-1 break-words font-medium text-slate-900";
   const labelClass = "text-xs font-semibold uppercase tracking-wider text-slate-400";
   const metaColumns: MetaItem[][] | null = snapshot
     ? [
