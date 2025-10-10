@@ -22,6 +22,9 @@ const formatChecksum = (value?: string | null) => value ?? FALLBACK;
 // Provide human readable labels for binary file names or fallback when missing.
 const formatBinaryFile = (value?: string | null) => value ?? FALLBACK;
 
+// Normalize version values for display while allowing zero as a valid version.
+const formatVersion = (value?: number | null) => (value ?? FALLBACK).toString();
+
 const TRANSACTION_STATUS_LABELS: Partial<Record<FileUploadDocumentChange["transactionStatus"], string>> = {
   pending: "Awaiting signature",
   cancelled: "Signature cancelled",
@@ -61,6 +64,10 @@ export function DocumentSummaryCard({ document }: DocumentSummaryCardProps) {
     {
       label: "Timestamp",
       value: formatTimestamp(document?.timestamp),
+    },
+    {
+      label: "Version",
+      value: formatVersion(document?.version),
     },
     {
       label: "Checksum",

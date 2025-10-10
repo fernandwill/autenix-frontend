@@ -26,6 +26,7 @@ export type FileUploadDocumentChange = {
   checksum: string | null;
   binHash: string | null;
   binFileName: string | null;
+  version: number | null;
   transactionHash: string | null;
   transactionUrl: string | null;
   transactionStatus: "idle" | "pending" | "confirmed" | "cancelled" | "error";
@@ -49,6 +50,7 @@ interface UploadEntry {
   binHash?: string;
   binFile?: File | null;
   binFileName?: string;
+  version: number;
   error?: string;
   transactionHash?: string;
   transactionUrl?: string | null;
@@ -67,6 +69,7 @@ type PersistedUploadEntry = {
   checksum?: string;
   binHash?: string;
   binFileName?: string;
+  version?: number;
   error?: string;
   transactionHash?: string;
   transactionUrl?: string | null;
@@ -76,6 +79,14 @@ type PersistedUploadEntry = {
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const ACCEPTED_TYPES = ["application/pdf"] as const;
+const MIN_VERSION = 0;
+const MAX_VERSION = 255;
+
+const clampVersion = (value: number): number => {
+  if (!Number.isFinite(value)) return MIN_VERSION;
+  const normalized = Math.trunc(value);
+  return Math.min(Math.max(normalized, MIN_VERSION), MAX_VERSION);
+};
 
 // Determine whether the provided file is a supported PDF document.
 const isPdfFile = (file: File) =>
@@ -143,6 +154,7 @@ const createDetailSnapshot = (entry: UploadEntry): DocumentDetailSnapshot => {
     checksum: entry.checksum ?? null,
     binHash: entry.binHash ?? null,
     binFileName: entry.binFileName ?? entry.binFile?.name ?? null,
+    version: entry.version ?? null,
     transactionHash: entry.transactionHash ?? null,
     transactionUrl: entry.transactionUrl ?? null,
     error: entry.error ?? null,
@@ -202,12 +214,14 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
         file: null,
         binFile: null,
         fileType: entry.fileType ?? "application/pdf",
+        version: clampVersion(entry.version ?? 1),
       } satisfies UploadEntry));
     } catch (error) {
       console.warn("Failed to restore stored uploads.", error);
       return [];
     }
   });
+  const [documentVersion, setDocumentVersion] = useState<number>(1);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const client = useMemo(() => getSolanaClient(), []);
   const { address, signTransaction } = useSolanaWallet();
@@ -233,6 +247,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
         checksum: entry.checksum ?? null,
         binHash: entry.binHash ?? null,
         binFileName: entry.binFileName ?? entry.binFile?.name ?? null,
+        version: entry.version ?? null,
         transactionHash: entry.transactionHash ?? null,
         transactionUrl: entry.transactionUrl ?? null,
         transactionStatus: entry.transactionStatus ?? "idle",
@@ -275,9 +290,12 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
         return;
       }
 
-      const serializable: PersistedUploadEntry[] = entries.map(({ file, binFile, ...persistable }) => ({
-        ...persistable,
-      }));
+      const serializable: PersistedUploadEntry[] = entries.map((entry) => {
+        const { file, binFile, ...persistable } = entry;
+        void file;
+        void binFile;
+        return { ...persistable };
+      });
       window.localStorage.setItem(ENTRY_STORAGE_KEY, JSON.stringify(serializable));
     } catch (error) {
       console.warn("Failed to persist uploads.", error);
@@ -301,6 +319,10 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
     async (entry: UploadEntry) => {
       const { id, file } = entry;
       let currentEntry: UploadEntry = entry;
+      const normalizedVersion = clampVersion(currentEntry.version);
+      if (normalizedVersion !== currentEntry.version) {
+        currentEntry = { ...currentEntry, version: normalizedVersion };
+      }
       let computedBinHash: string | null = entry.binHash ?? null;
       let binFile: File | null = entry.binFile ?? null;
       let binFileName = entry.binFileName ?? deriveBinFileName(entry.fileName);
@@ -423,6 +445,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
             wallet,
             documentHashHex,
             documentName: currentEntry.binFileName ?? binFileName,
+            version: currentEntry.version,
           });
 
           syncEntry(
@@ -489,6 +512,11 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
       );
       if (!accepted.length) return;
 
+      const targetVersion = clampVersion(documentVersion);
+      if (targetVersion !== documentVersion) {
+        setDocumentVersion(targetVersion);
+      }
+
       const preparedEntries = accepted.map((file) => ({
         id: nanoid(),
         file,
@@ -501,6 +529,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
         transactionStatus: "idle" as FileUploadDocumentChange["transactionStatus"],
         binFile: null,
         binFileName: deriveBinFileName(file.name),
+        version: targetVersion,
       } satisfies UploadEntry));
 
       setEntries((prev) => [...prev, ...preparedEntries]);
@@ -510,7 +539,7 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
         void convertEntry(newEntry);
       });
     },
-    [convertEntry, emitDocumentChange],
+    [convertEntry, documentVersion, emitDocumentChange],
   );
 
   // Support drag-and-drop uploads as an alternative to the file picker.
@@ -567,6 +596,33 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
       </CardHeader>
 
       <CardContent className="space-y-6">
+        <div className="grid gap-2 sm:max-w-xs">
+          <Label htmlFor="document-version-input" className="text-sm font-medium text-muted-foreground">
+            Document version
+          </Label>
+          <Input
+            id="document-version-input"
+            type="number"
+            inputMode="numeric"
+            min={MIN_VERSION}
+            max={MAX_VERSION}
+            step={1}
+            value={documentVersion}
+            onChange={(event) => {
+              const nextValue = Number.parseInt(event.target.value, 10);
+              setDocumentVersion(Number.isNaN(nextValue) ? MIN_VERSION : clampVersion(nextValue));
+            }}
+            onBlur={(event) => {
+              const nextValue = Number.parseInt(event.target.value, 10);
+              setDocumentVersion(Number.isNaN(nextValue) ? MIN_VERSION : clampVersion(nextValue));
+            }}
+            aria-describedby="document-version-helper"
+          />
+          <p id="document-version-helper" className="text-xs text-muted-foreground">
+            Applied to new uploads. Accepts whole numbers between {MIN_VERSION} and {MAX_VERSION}.
+          </p>
+        </div>
+
         <Label
           htmlFor="file-input"
           onDragOver={(event) => event.preventDefault()}
@@ -666,6 +722,9 @@ export function FileUpload({ onDocumentChange }: FileUploadProps) {
                     <Progress value={entry.progress} className="h-1.5" />
 
                     <div className="space-y-1 text-xs text-muted-foreground">
+                      <p>
+                        Version: <span className="font-mono">{entry.version}</span>
+                      </p>
                       <p className="break-all">
                         Checksum:{" "}
                         <span className="font-mono">

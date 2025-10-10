@@ -9,6 +9,7 @@ export type DocumentDetailSnapshot = {
   status: UploadStatus;
   statusLabel: string;
   statusDescription: string;
+  version: number | null;
   checksum: string | null;
   binHash: string | null;
   binFileName: string | null;
