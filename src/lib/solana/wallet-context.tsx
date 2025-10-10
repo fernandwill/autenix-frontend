@@ -33,6 +33,7 @@ export function SolanaWalletProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
+  const [hasAttemptedEagerConnect, setHasAttemptedEagerConnect] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -42,15 +43,50 @@ export function SolanaWalletProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!provider?.on) return;
 
+    const handleConnect = (maybePublicKey?: unknown) => {
+      if (isPublicKeyLike(maybePublicKey)) {
+        setAddress(maybePublicKey.toBase58());
+        return;
+      }
+
+      const nextAddress = provider.publicKey?.toBase58();
+      if (nextAddress) {
+        setAddress(nextAddress);
+      }
+    };
+
     const handleDisconnect = () => {
       setAddress(null);
     };
 
+    provider.on("connect", handleConnect);
     provider.on("disconnect", handleDisconnect);
     return () => {
+      provider.off?.("connect", handleConnect);
       provider.off?.("disconnect", handleDisconnect);
     };
   }, [provider]);
+
+  useEffect(() => {
+    if (!provider || hasAttemptedEagerConnect) return;
+
+    setHasAttemptedEagerConnect(true);
+
+    const existingAddress = provider.publicKey?.toBase58();
+    if (existingAddress) {
+      setAddress(existingAddress);
+      return;
+    }
+
+    provider
+      .connect({ onlyIfTrusted: true })
+      .then((result) => {
+        setAddress(result.publicKey.toBase58());
+      })
+      .catch((error) => {
+        console.debug("Autoconnect to Solana wallet failed.", error);
+      });
+  }, [provider, hasAttemptedEagerConnect]);
 
   // Attempt to connect to the detected Wallet Standard provider.
   const connect = useCallback(async () => {
@@ -178,6 +214,15 @@ function base64ToUint8Array(base64: string): Uint8Array {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes;
+}
+
+function isPublicKeyLike(value: unknown): value is { toBase58: () => string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "toBase58" in value &&
+    typeof (value as { toBase58?: unknown }).toBase58 === "function"
+  );
 }
 
 type LegacyTransactionAdapter = {
