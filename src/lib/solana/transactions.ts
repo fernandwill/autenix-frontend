@@ -4,10 +4,12 @@ import {
   createNoopSigner,
   createTransaction,
   getExplorerLink,
+  getSignatureFromTransaction,
   transactionFromBase64,
   transactionToBase64,
   type Address,
   type Commitment,
+  type Signature,
   type FullySignedTransaction,
   type SolanaClient,
   type TransactionWithBlockhashLifetime,
@@ -93,22 +95,139 @@ export async function submitNotarizationTransaction({
     ...signedTransaction,
     lifetimeConstraint: compiledTransaction.lifetimeConstraint,
   };
+  const signature = getSignatureFromTransaction(signedTransaction);
+  const explorerUrl = getExplorerLink({
+    cluster: inferClusterFromUrl(client.urlOrMoniker),
+    transaction: signature,
+  });
+
   try {
-    const signature = await client.sendAndConfirmTransaction(sendableTransaction, {
+    await client.sendAndConfirmTransaction(sendableTransaction, {
       commitment,
       skipPreflight: true,
     });
 
-    return {
-      signature,
-      explorerUrl: getExplorerLink({
-        cluster: inferClusterFromUrl(client.urlOrMoniker),
-        transaction: signature,
-      }),
-    };
+    return { signature, explorerUrl };
   } catch (error) {
+    const confirmed = await confirmTransactionAfterSendFailure({
+      client,
+      commitment,
+      signature,
+    });
+
+    if (confirmed) {
+      return { signature, explorerUrl };
+    }
+
     throw enhanceSendError(error);
   }
+}
+
+type ConfirmTransactionAfterSendFailureConfig = {
+  client: SolanaClient;
+  signature: string;
+  commitment: Commitment;
+  maxAttempts?: number;
+};
+
+async function confirmTransactionAfterSendFailure({
+  client,
+  signature: signatureString,
+  commitment,
+  maxAttempts = 5,
+}: ConfirmTransactionAfterSendFailureConfig): Promise<boolean> {
+  let attempt = 0;
+  let delayMs = 500;
+  while (attempt < maxAttempts) {
+    try {
+      const signature = signatureString as unknown as Signature;
+      const { value } = await client.rpc
+        .getSignatureStatuses([signature], { searchTransactionHistory: true })
+        .send();
+      const status = value?.[0] ?? null;
+
+      if (hasSufficientConfirmation(status, commitment)) {
+        return true;
+      }
+
+      if (status?.err) {
+        return false;
+      }
+    } catch (statusError) {
+      console.warn("Failed to query transaction status after send error.", statusError);
+    }
+
+    await wait(delayMs);
+    delayMs = Math.min(delayMs * 2, 4_000);
+    attempt += 1;
+  }
+
+  return false;
+}
+
+type SignatureStatusLike = {
+  confirmations?: number | bigint | null;
+  confirmationStatus?: "processed" | "confirmed" | "finalized" | null;
+  err?: unknown;
+} | null;
+
+function hasSufficientConfirmation(status: SignatureStatusLike, commitment: Commitment): boolean {
+  if (!status || status.err) {
+    return false;
+  }
+
+  const requiredLevel = normalizeCommitment(commitment);
+  const actualLevel = deriveConfirmationLevel(status);
+
+  return confirmationLevelToPriority(actualLevel) >= confirmationLevelToPriority(requiredLevel);
+}
+
+type ConfirmationLevel = "processed" | "confirmed" | "finalized";
+
+function deriveConfirmationLevel(status: Exclude<SignatureStatusLike, null>): ConfirmationLevel {
+  if (status.confirmationStatus) {
+    return status.confirmationStatus;
+  }
+
+  if (status.confirmations == null) {
+    return "finalized";
+  }
+
+  const confirmations =
+    typeof status.confirmations === "bigint"
+      ? Number(status.confirmations)
+      : status.confirmations;
+
+  return confirmations > 0 ? "confirmed" : "processed";
+}
+
+function normalizeCommitment(commitment: Commitment): ConfirmationLevel {
+  switch (commitment) {
+    case "processed":
+      return "processed";
+    case "finalized":
+      return "finalized";
+    case "confirmed":
+    default:
+      return "confirmed";
+  }
+}
+
+function confirmationLevelToPriority(level: ConfirmationLevel): number {
+  switch (level) {
+    case "processed":
+      return 0;
+    case "confirmed":
+      return 1;
+    case "finalized":
+      return 2;
+    default:
+      return 1;
+  }
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function inferClusterFromUrl(
