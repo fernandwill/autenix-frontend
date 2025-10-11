@@ -117,10 +117,6 @@ export function DocumentSummaryCard({
                         {document.documentIdentifier ? (
                           <div className="break-all">{document.documentIdentifier}</div>
                         ) : null}
-                        <div className="flex flex-wrap items-center gap-1">
-                          <span className="font-semibold text-muted-foreground">Transaction hash:</span>
-                          {renderTransactionHashValue(document, { subtle: true })}
-                        </div>
                       </div>
                     </td>
                     <td className="w-[24%] px-4 py-3 align-top font-medium text-foreground">

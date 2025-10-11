@@ -369,10 +369,6 @@ export function DocumentDetailPage() {
             copyValue: snapshot.notarizationAccount ?? undefined,
             copyMessage: snapshot.notarizationAccount ? "Account address copied!" : undefined,
           },
-          {
-            label: "Additional data",
-            value: snapshot.additional != null ? snapshot.additional.toString() : "None",
-          },
         ],
       ]
     : null;
