@@ -54,7 +54,7 @@ export function DocumentSummaryCard({ documents }: DocumentSummaryCardProps) {
   });
 
   return (
-    <Card className="w-full max-w-3xl">
+    <Card className="w-full">
       <CardHeader>
         <CardTitle className="text-lg font-semibold">My Documents</CardTitle>
       </CardHeader>
