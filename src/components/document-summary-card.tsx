@@ -44,20 +44,31 @@ const formatDocumentHash = (document: FileUploadDocumentChange) =>
 const formatDocumentName = (document: FileUploadDocumentChange) =>
   document.fileName ?? document.binFileName ?? FALLBACK;
 
-// Render the transaction hash as a link when an explorer URL is available.
-const formatTransactionHash = (document: FileUploadDocumentChange): ReactNode =>
-  document.transactionHash && document.transactionUrl ? (
-    <a
-      href={document.transactionUrl}
-      target="_blank"
-      rel="noreferrer"
-      className="break-all text-primary underline underline-offset-2"
-    >
-      {document.transactionHash}
-    </a>
-  ) : (
-    document.transactionHash ?? FALLBACK
-  );
+type TransactionDisplayOptions = {
+  subtle?: boolean;
+};
+
+// Render the transaction hash as either a muted span or an explorer link.
+const renderTransactionIdValue = (
+  document: FileUploadDocumentChange,
+  { subtle = false }: TransactionDisplayOptions = {},
+): ReactNode => {
+  const baseClass = "break-all font-mono text-xs";
+  const textClass = subtle ? "text-muted-foreground" : "text-foreground";
+
+  if (document.transactionHash && document.transactionUrl) {
+    const linkColorClass = subtle ? "text-muted-foreground" : "text-primary";
+    const linkClass = `${baseClass} ${linkColorClass} underline underline-offset-2`;
+
+    return (
+      <a href={document.transactionUrl} target="_blank" rel="noreferrer" className={linkClass}>
+        {document.transactionHash}
+      </a>
+    );
+  }
+
+  return <span className={`${baseClass} ${textClass}`}>{document.transactionHash ?? FALLBACK}</span>;
+};
 
 // Display a sortable summary table of notarized documents for the connected wallet.
 export function DocumentSummaryCard({
@@ -94,7 +105,7 @@ export function DocumentSummaryCard({
                   <th className="w-[28%] px-4 py-3 font-medium">Document</th>
                   <th className="w-[24%] px-4 py-3 font-medium">Created at</th>
                   <th className="w-[24%] px-4 py-3 font-medium">Document hash</th>
-                  <th className="w-[24%] px-4 py-3 font-medium">Transaction hash</th>
+                  <th className="w-[24%] px-4 py-3 font-medium">Transaction ID</th>
                 </tr>
               </thead>
               <tbody>
@@ -102,11 +113,15 @@ export function DocumentSummaryCard({
                   <tr key={document.id} className="border-b border-border last:border-b-0">
                     <td className="w-[28%] px-4 py-3 align-top text-foreground">
                       <div className="font-medium">{formatDocumentName(document)}</div>
-                      {document.documentIdentifier ? (
-                        <div className="mt-1 break-all text-xs text-muted-foreground">
-                          {document.documentIdentifier}
+                      <div className="mt-1 space-y-1 text-xs text-muted-foreground">
+                        {document.documentIdentifier ? (
+                          <div className="break-all">{document.documentIdentifier}</div>
+                        ) : null}
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="font-semibold text-muted-foreground">Transaction ID:</span>
+                          {renderTransactionIdValue(document, { subtle: true })}
                         </div>
-                      ) : null}
+                      </div>
                     </td>
                     <td className="w-[24%] px-4 py-3 align-top font-medium text-foreground">
                       {formatTimestamp(document.timestamp)}
@@ -114,8 +129,8 @@ export function DocumentSummaryCard({
                     <td className="w-[24%] break-all px-4 py-3 align-top font-mono text-xs text-foreground">
                       {formatDocumentHash(document)}
                     </td>
-                    <td className="w-[24%] break-all px-4 py-3 align-top font-mono text-xs text-foreground">
-                      {formatTransactionHash(document)}
+                    <td className="w-[24%] px-4 py-3 align-top">
+                      {renderTransactionIdValue(document)}
                     </td>
                     <td className="w-28 px-4 py-3 align-top text-right">
                       <Button
