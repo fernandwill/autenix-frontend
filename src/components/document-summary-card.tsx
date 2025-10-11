@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,9 @@ import type { FileUploadDocumentChange } from "@/components/file-upload";
 
 interface DocumentSummaryCardProps {
   documents: FileUploadDocumentChange[];
+  isLoading?: boolean;
+  error?: string | null;
+  walletAddress?: string | null;
 }
 
 const FALLBACK = "N/A";
@@ -27,6 +31,25 @@ const formatTimestamp = (value?: string | null) => {
 
 const formatChecksum = (value?: string | null) => value ?? FALLBACK;
 
+const formatDocumentHash = (document: FileUploadDocumentChange) => {
+  if (document.binHash) {
+    return document.binHash;
+  }
+  return formatChecksum(document.checksum);
+};
+
+const formatDocumentName = (document: FileUploadDocumentChange) => {
+  if (document.fileName) {
+    return document.fileName;
+  }
+
+  if (document.binFileName) {
+    return document.binFileName;
+  }
+
+  return FALLBACK;
+};
+
 const formatTransactionHash = (document: FileUploadDocumentChange): ReactNode => {
   if (document.transactionHash && document.transactionUrl) {
     return (
@@ -44,7 +67,12 @@ const formatTransactionHash = (document: FileUploadDocumentChange): ReactNode =>
   return document.transactionHash ?? FALLBACK;
 };
 
-export function DocumentSummaryCard({ documents }: DocumentSummaryCardProps) {
+export function DocumentSummaryCard({
+  documents,
+  isLoading = false,
+  error,
+  walletAddress,
+}: DocumentSummaryCardProps) {
   const hasDocuments = documents.length > 0;
   const sortedDocuments = [...documents].sort((a, b) => {
     const aTime = Date.parse(a.timestamp ?? "");
@@ -58,29 +86,46 @@ export function DocumentSummaryCard({ documents }: DocumentSummaryCardProps) {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle className="text-lg font-semibold">My Documents</CardTitle>
+        <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+          My Documents
+          {isLoading ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
+        </CardTitle>
       </CardHeader>
       <CardContent>
+        {error ? (
+          <div className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </div>
+        ) : null}
         {hasDocuments ? (
           <div className="overflow-x-auto">
             <table className="min-w-full table-fixed text-left text-sm">
               <thead>
                 <tr className="border-b border-border text-muted-foreground">
-                  <th className="w-1/4 px-4 py-3 font-medium">Created at</th>
-                  <th className="w-1/3 px-1/4 py-3 font-medium">Checksum</th>
-                  <th className="w-1/3 px-1/4 py-3 font-medium">Transaction hash</th>
+                  <th className="w-[28%] px-4 py-3 font-medium">Document</th>
+                  <th className="w-[24%] px-4 py-3 font-medium">Created at</th>
+                  <th className="w-[24%] px-4 py-3 font-medium">Document hash</th>
+                  <th className="w-[24%] px-4 py-3 font-medium">Transaction hash</th>
                 </tr>
               </thead>
               <tbody>
                 {sortedDocuments.map((document) => (
                   <tr key={document.id} className="border-b border-border last:border-b-0">
-                    <td className="w-1/4 px-4 py-3 align-top font-medium text-foreground">
+                    <td className="w-[28%] px-4 py-3 align-top text-foreground">
+                      <div className="font-medium">{formatDocumentName(document)}</div>
+                      {document.documentIdentifier ? (
+                        <div className="mt-1 break-all text-xs text-muted-foreground">
+                          {document.documentIdentifier}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="w-[24%] px-4 py-3 align-top font-medium text-foreground">
                       {formatTimestamp(document.timestamp)}
                     </td>
-                    <td className="w-1/3 break-all px-1/4 py-3 align-top font-mono text-xs text-foreground">
-                      {formatChecksum(document.checksum)}
+                    <td className="w-[24%] break-all px-4 py-3 align-top font-mono text-xs text-foreground">
+                      {formatDocumentHash(document)}
                     </td>
-                    <td className="w-1/3 break-all px-2 py-3 align-top font-mono text-xs text-foreground">
+                    <td className="w-[24%] break-all px-4 py-3 align-top font-mono text-xs text-foreground">
                       {formatTransactionHash(document)}
                     </td>
                     <td className="w-28 px-4 py-3 align-top text-right">
@@ -100,7 +145,9 @@ export function DocumentSummaryCard({ documents }: DocumentSummaryCardProps) {
           </div>
         ) : (
           <div className="rounded-lg border border-dashed border-muted-foreground/40 p-6 text-center text-sm text-muted-foreground">
-            Upload a document to see its notarization metadata here.
+            {walletAddress
+              ? "No notarized documents found for this wallet yet. Upload a PDF to see it listed here."
+              : "Connect your wallet or upload a document to see its notarization metadata here."}
           </div>
         )}
       </CardContent>

@@ -6,6 +6,7 @@ import {
   documentHashFromHex,
   ensureU8,
   findNotarizationPda,
+  NOTARIZATION_PROGRAM_ID,
 } from "@/lib/solana/notarization-program";
 
 const ACCOUNT_DISCRIMINATOR_LENGTH = 8;
@@ -14,9 +15,26 @@ const PUBLIC_KEY_LENGTH = 32;
 const TIMESTAMP_BYTE_LENGTH = 8;
 const VERSION_BYTE_LENGTH = 1;
 const LENGTH_PREFIX_BYTE_LENGTH = 4;
+const NOTARY_OFFSET = ACCOUNT_DISCRIMINATOR_LENGTH + HASH_LENGTH;
 
 const textDecoder = new TextDecoder();
 const addressDecoder = getAddressDecoder();
+const decodeBase64ToBytes = (value: string): Uint8Array => {
+  if (typeof globalThis.Buffer !== "undefined") {
+    return Uint8Array.from(globalThis.Buffer.from(value, "base64"));
+  }
+
+  if (typeof atob === "function") {
+    const binary = atob(value);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return bytes;
+  }
+
+  throw new Error("Base64 decoding is not supported in this environment.");
+};
 
 const bytesToHex = (bytes: Uint8Array) =>
   Array.from(bytes)
@@ -96,6 +114,36 @@ const decodeNotarizationAccount = (data: Uint8Array) => {
   } satisfies Omit<NotarizationAccountDetails, "accountAddress">;
 };
 
+type ProgramAccount = {
+  pubkey: string;
+  account: {
+    data: unknown;
+  };
+};
+
+const decodeAccountData = (data: unknown): Uint8Array => {
+  if (data instanceof Uint8Array) {
+    return data;
+  }
+
+  if (typeof globalThis.Buffer !== "undefined" && globalThis.Buffer.isBuffer?.(data)) {
+    return new Uint8Array(data as Buffer);
+  }
+
+  if (Array.isArray(data)) {
+    const [content, encoding] = data as [unknown, unknown];
+    if (typeof content === "string" && (encoding === "base64" || encoding == null)) {
+      return decodeBase64ToBytes(content);
+    }
+  }
+
+  if (typeof data === "string") {
+    return decodeBase64ToBytes(data);
+  }
+
+  throw new Error("Unsupported account data encoding received from RPC response.");
+};
+
 export type GetNotarizationAccountDetailsConfig = {
   client: SolanaClient;
   notary: string;
@@ -127,4 +175,56 @@ export async function getNotarizationAccountDetails({
     ...decoded,
     accountAddress,
   };
+}
+
+export type ListNotarizationAccountsConfig = {
+  client: SolanaClient;
+  notary: string;
+};
+
+export async function listNotarizationAccountsByNotary({
+  client,
+  notary,
+}: ListNotarizationAccountsConfig): Promise<NotarizationAccountDetails[]> {
+  if (!notary) {
+    return [];
+  }
+
+  const rpc = client.rpc as unknown as {
+    getProgramAccounts: (
+      programAddress: string,
+      config?: unknown,
+    ) => { send: () => Promise<unknown> };
+  };
+
+  const response = (await rpc
+    .getProgramAccounts(NOTARIZATION_PROGRAM_ID, {
+      filters: [
+        {
+          memcmp: {
+            offset: NOTARY_OFFSET,
+            bytes: notary,
+          },
+        },
+      ],
+      encoding: "base64",
+    })
+    .send()) as
+    | ProgramAccount[]
+    | { value: ProgramAccount[] }
+    | { context: unknown; value: ProgramAccount[] };
+
+  const accounts: ProgramAccount[] = Array.isArray((response as { value?: unknown }).value)
+    ? ((response as { value: ProgramAccount[] }).value ?? [])
+    : ((response as ProgramAccount[]) ?? []);
+
+  return accounts.map((account) => {
+    const rawData = decodeAccountData(account.account?.data);
+    const decoded = decodeNotarizationAccount(rawData);
+
+    return {
+      ...decoded,
+      accountAddress: account.pubkey,
+    } satisfies NotarizationAccountDetails;
+  });
 }
