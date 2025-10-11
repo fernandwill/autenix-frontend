@@ -20,7 +20,7 @@ function HomePage() {
         <SolanaTransactionPanel />
         <ThemeToggle />
       </div>
-      <main className="flex flex-1 justify-center px-4 py-12">
+      <main className="flex flex-1 justify-center px-4 pb-12 pt-28 sm:pt-32">
         <div className="flex w-full max-w-5xl flex-col gap-8">
           {/* File uploader remains the primary document ingestion path. */}
           <FileUpload onDocumentsChange={setDocuments} />

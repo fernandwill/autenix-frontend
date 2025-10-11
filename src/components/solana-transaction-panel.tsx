@@ -25,20 +25,20 @@ export function SolanaTransactionPanel({ className }: SolanaTransactionPanelProp
       };
 
   return (
-    <div className={cn("flex flex-col items-end gap-1", className)}>
+    <div className={cn("flex flex-col items-end gap-2", className)}>
       <Button
         type="button"
         variant={connectionCopy.buttonVariant}
-        className="min-w-[220px] gap-2 text-left"
+        className="min-w-[240px] items-center justify-between gap-3"
         disabled={isConnecting}
         onClick={connectionCopy.action}
       >
-        <span className="flex w-full items-center gap-2">
+        <span className="flex items-center gap-2">
           {isConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
-          <span className="flex-1 font-semibold">{connectionCopy.buttonLabel}</span>
+          <span className="font-semibold">{connectionCopy.buttonLabel}</span>
         </span>
         {isConnected && address ? (
-          <span className="block truncate text-xs font-mono text-muted-foreground">{address}</span>
+          <span className="ml-4 max-w-[180px] truncate text-xs font-mono text-muted-foreground">{address}</span>
         ) : null}
       </Button>
       {connectError ? (
