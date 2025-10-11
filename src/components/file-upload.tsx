@@ -249,28 +249,29 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
       const parsed = JSON.parse(stored) as unknown;
       if (!Array.isArray(parsed)) return [];
 
-      return parsed
-        .map((item) => {
-          const document = item as Partial<FileUploadDocumentChange>;
-          if (!document || typeof document !== "object" || typeof document.id !== "string") {
-            return null;
-          }
+      const restored: FileUploadDocumentChange[] = [];
+      parsed.forEach((item) => {
+        const document = item as Partial<FileUploadDocumentChange>;
+        if (!document || typeof document !== "object" || typeof document.id !== "string") {
+          return;
+        }
 
-          return {
-            id: document.id,
-            fileName: document.fileName ?? "Untitled document",
-            timestamp: document.timestamp ?? new Date().toISOString(),
-            checksum: document.checksum ?? null,
-            binHash: document.binHash ?? null,
-            binFileName: document.binFileName ?? null,
-            version: document.version ?? null,
-            transactionHash: document.transactionHash ?? null,
-            transactionUrl: document.transactionUrl ?? null,
-            transactionStatus: (document.transactionStatus ?? "idle") as FileUploadDocumentChange["transactionStatus"],
-            error: document.error ?? null,
-          } satisfies FileUploadDocumentChange;
-        })
-        .filter((document): document is FileUploadDocumentChange => Boolean(document));
+        restored.push({
+          id: document.id,
+          fileName: document.fileName ?? "Untitled document",
+          timestamp: document.timestamp ?? new Date().toISOString(),
+          checksum: document.checksum ?? null,
+          binHash: document.binHash ?? null,
+          binFileName: document.binFileName ?? null,
+          version: document.version ?? null,
+          transactionHash: document.transactionHash ?? null,
+          transactionUrl: document.transactionUrl ?? null,
+          transactionStatus: (document.transactionStatus ?? "idle") as FileUploadDocumentChange["transactionStatus"],
+          error: document.error ?? null,
+        });
+      });
+
+      return restored;
     } catch (error) {
       console.warn("Failed to restore stored documents.", error);
       return [];
@@ -628,7 +629,7 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
   );
 
   return (
-    <Card className="w-full max-w-2xl">
+    <Card className="w-full">
       <CardHeader className="text-center">
         <CardTitle className="text-2xl">Hash notarized PDFs for on-chain verification</CardTitle>
         <CardDescription>
