@@ -49,7 +49,7 @@ type TransactionDisplayOptions = {
 };
 
 // Render the transaction hash as either a muted span or an explorer link.
-const renderTransactionIdValue = (
+const renderTransactionHashValue = (
   document: FileUploadDocumentChange,
   { subtle = false }: TransactionDisplayOptions = {},
 ): ReactNode => {
@@ -105,7 +105,7 @@ export function DocumentSummaryCard({
                   <th className="w-[28%] px-4 py-3 font-medium">Document</th>
                   <th className="w-[24%] px-4 py-3 font-medium">Created at</th>
                   <th className="w-[24%] px-4 py-3 font-medium">Document hash</th>
-                  <th className="w-[24%] px-4 py-3 font-medium">Transaction ID</th>
+                  <th className="w-[24%] px-4 py-3 font-medium">Transaction hash</th>
                 </tr>
               </thead>
               <tbody>
@@ -118,8 +118,8 @@ export function DocumentSummaryCard({
                           <div className="break-all">{document.documentIdentifier}</div>
                         ) : null}
                         <div className="flex flex-wrap items-center gap-1">
-                          <span className="font-semibold text-muted-foreground">Transaction ID:</span>
-                          {renderTransactionIdValue(document, { subtle: true })}
+                          <span className="font-semibold text-muted-foreground">Transaction hash:</span>
+                          {renderTransactionHashValue(document, { subtle: true })}
                         </div>
                       </div>
                     </td>
@@ -130,7 +130,7 @@ export function DocumentSummaryCard({
                       {formatDocumentHash(document)}
                     </td>
                     <td className="w-[24%] px-4 py-3 align-top">
-                      {renderTransactionIdValue(document)}
+                      {renderTransactionHashValue(document)}
                     </td>
                     <td className="w-28 px-4 py-3 align-top text-right">
                       <Button
