@@ -69,7 +69,9 @@ export function DocumentSummaryCard({ documents }: DocumentSummaryCardProps) {
                   <th className="w-1/4 py-3 font-medium">Created at</th>
                   <th className="w-1/3 py-3 font-medium">Checksum</th>
                   <th className="w-1/3 py-3 font-medium">Transaction hash</th>
-                  <th className="w-24 py-3 text-right font-medium">Actions</th>
+                  <th className="w-20 py-3 text-right font-medium">
+                    <span className="sr-only">Details</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -85,7 +87,12 @@ export function DocumentSummaryCard({ documents }: DocumentSummaryCardProps) {
                       {formatTransactionHash(document)}
                     </td>
                     <td className="py-3 align-top text-right">
-                      <Button asChild size="sm" variant="outline">
+                      <Button
+                        asChild
+                        size="sm"
+                        variant="outline"
+                        className="h-8 rounded-md px-2 text-xs"
+                      >
                         <Link to={`/documents/${document.id}`}>View Details</Link>
                       </Button>
                     </td>
