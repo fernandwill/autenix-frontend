@@ -15,58 +15,51 @@ interface DocumentSummaryCardProps {
 
 const FALLBACK = "N/A";
 
-const formatTimestamp = (value?: string | null) => {
-  if (!value) return FALLBACK;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return FALLBACK;
-
-  const pad = (input: number) => String(input).padStart(2, "0");
-  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-  const day = pad(date.getDate());
-  const month = pad(date.getMonth() + 1);
-  const year = date.getFullYear();
-
-  return `${time}, ${day}/${month}/${year}`;
+// Parse timestamps to milliseconds while ensuring invalid dates sort last.
+const toMillis = (value?: string | null) => {
+  const parsed = Date.parse(value ?? "");
+  return Number.isNaN(parsed) ? null : parsed;
 };
 
+// Format an ISO timestamp into the "HH:MM:SS, DD/MM/YYYY" label used in the table.
+const formatTimestamp = (value?: string | null) => {
+  const millis = toMillis(value);
+  if (millis == null) return FALLBACK;
+
+  const date = new Date(millis);
+  const pad = (input: number) => String(input).padStart(2, "0");
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}, ${pad(date.getDate())}/${pad(
+    date.getMonth() + 1,
+  )}/${date.getFullYear()}`;
+};
+
+// Provide a consistent placeholder when no checksum is available.
 const formatChecksum = (value?: string | null) => value ?? FALLBACK;
 
-const formatDocumentHash = (document: FileUploadDocumentChange) => {
-  if (document.binHash) {
-    return document.binHash;
-  }
-  return formatChecksum(document.checksum);
-};
+// Prefer the notarized bin hash when present, otherwise fall back to the PDF checksum.
+const formatDocumentHash = (document: FileUploadDocumentChange) =>
+  document.binHash ?? formatChecksum(document.checksum);
 
-const formatDocumentName = (document: FileUploadDocumentChange) => {
-  if (document.fileName) {
-    return document.fileName;
-  }
+// Choose the best available document title for display purposes.
+const formatDocumentName = (document: FileUploadDocumentChange) =>
+  document.fileName ?? document.binFileName ?? FALLBACK;
 
-  if (document.binFileName) {
-    return document.binFileName;
-  }
+// Render the transaction hash as a link when an explorer URL is available.
+const formatTransactionHash = (document: FileUploadDocumentChange): ReactNode =>
+  document.transactionHash && document.transactionUrl ? (
+    <a
+      href={document.transactionUrl}
+      target="_blank"
+      rel="noreferrer"
+      className="break-all text-primary underline underline-offset-2"
+    >
+      {document.transactionHash}
+    </a>
+  ) : (
+    document.transactionHash ?? FALLBACK
+  );
 
-  return FALLBACK;
-};
-
-const formatTransactionHash = (document: FileUploadDocumentChange): ReactNode => {
-  if (document.transactionHash && document.transactionUrl) {
-    return (
-      <a
-        href={document.transactionUrl}
-        target="_blank"
-        rel="noreferrer"
-        className="break-all text-primary underline underline-offset-2"
-      >
-        {document.transactionHash}
-      </a>
-    );
-  }
-
-  return document.transactionHash ?? FALLBACK;
-};
-
+// Display a sortable summary table of notarized documents for the connected wallet.
 export function DocumentSummaryCard({
   documents,
   isLoading = false,
@@ -75,12 +68,8 @@ export function DocumentSummaryCard({
 }: DocumentSummaryCardProps) {
   const hasDocuments = documents.length > 0;
   const sortedDocuments = [...documents].sort((a, b) => {
-    const aTime = Date.parse(a.timestamp ?? "");
-    const bTime = Date.parse(b.timestamp ?? "");
-    if (Number.isNaN(aTime) && Number.isNaN(bTime)) return 0;
-    if (Number.isNaN(aTime)) return 1;
-    if (Number.isNaN(bTime)) return -1;
-    return bTime - aTime;
+    const diff = (toMillis(b.timestamp) ?? Number.NEGATIVE_INFINITY) - (toMillis(a.timestamp) ?? Number.NEGATIVE_INFINITY);
+    return diff || 0;
   });
 
   return (
