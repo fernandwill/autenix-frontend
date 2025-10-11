@@ -16,13 +16,12 @@ import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { getSolanaClient } from "@/lib/solana/client";
+import { buildExplorerUrl } from "@/lib/solana/explorer";
 import { getNotarizationAccountDetails } from "@/lib/solana/notarization-account";
 import {
   parseDocumentIdentifier,
   type DocumentDetailSnapshot,
 } from "@/lib/upload-types";
-import { getExplorerLink } from "gill";
-
 type CopyField = "binary" | "transaction" | "notary" | "account";
 type MetaItem = {
   label: string;
@@ -68,25 +67,6 @@ const STATUS_VISUALS: Record<"success" | "error" | "converting" | "default", Bas
     iconClass: "h-4 w-4",
   },
 } as const;
-
-const deriveExplorerCluster = (
-  urlOrMoniker: unknown,
-): "devnet" | "mainnet" | "testnet" | "localnet" | "mainnet-beta" => {
-  const normalized = (typeof urlOrMoniker === "string" ? urlOrMoniker : String(urlOrMoniker)).toLowerCase();
-
-  if (normalized.includes("devnet")) return "devnet";
-  if (normalized.includes("testnet")) return "testnet";
-  if (normalized.includes("local")) return "localnet";
-  if (normalized.includes("mainnet")) return "mainnet";
-
-  return "mainnet-beta";
-};
-
-const buildExplorerUrl = (urlOrMoniker: unknown, signature: string) =>
-  getExplorerLink({
-    cluster: deriveExplorerCluster(urlOrMoniker),
-    transaction: signature,
-  });
 
 const SIGNATURE_STATUS_VISUALS: Record<"confirmed" | "error", StatusVisual> = {
   confirmed: {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type KeyboardEventHandler } from "react";
 import { Route, Routes, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import type { Address } from "gill";
 
 // Main application layout stitches together uploads, hash lookup, and Solana status.
 import { FileUpload, type FileUploadDocumentChange } from "@/components/file-upload";
@@ -11,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { DocumentDetailPage } from "@/pages/document-detail-page";
 import { getSolanaClient } from "@/lib/solana/client";
+import { buildExplorerUrl } from "@/lib/solana/explorer";
 import { listNotarizationAccountsByNotary } from "@/lib/solana/notarization-account";
 import { composeDocumentIdentifier } from "@/lib/upload-types";
 import { useSolanaWallet } from "@/lib/solana/wallet-context";
@@ -40,12 +42,51 @@ function HomePage() {
         notary: address,
       });
 
+      type SignatureLookupEntry = {
+        accountAddress: string;
+        signature: string | null;
+        explorerUrl: string | null;
+      };
+
+      const signatures = await Promise.all(
+        notarizations.map(async (item): Promise<SignatureLookupEntry> => {
+          try {
+            const { value } = await client.rpc
+              .getSignaturesForAddress(item.accountAddress as Address<string>, { limit: 1 })
+              .send();
+
+            const signature = value?.[0]?.signature ?? null;
+            return {
+              accountAddress: item.accountAddress,
+              signature,
+              explorerUrl: signature ? buildExplorerUrl(client.urlOrMoniker, signature) : null,
+            };
+          } catch (error) {
+            console.warn(
+              `Failed to fetch transaction signatures for notarization account ${item.accountAddress}.`,
+              error,
+            );
+            return {
+              accountAddress: item.accountAddress,
+              signature: null,
+              explorerUrl: null,
+            };
+          }
+        }),
+      );
+
+      const signatureLookup = new Map(
+        signatures.map((entry) => [entry.accountAddress, entry] as const),
+      );
+
       return notarizations.map((item) => {
         const documentIdentifier = composeDocumentIdentifier({
           notary: item.notary,
           hash: item.hash,
           version: item.version,
         });
+
+        const signatureEntry = signatureLookup.get(item.accountAddress);
 
         const timestamp = Number.isFinite(item.timestamp)
           ? new Date(item.timestamp * 1000).toISOString()
@@ -61,8 +102,8 @@ function HomePage() {
           binHash: item.hash,
           binFileName: item.documentName,
           version: item.version,
-          transactionHash: null,
-          transactionUrl: null,
+          transactionHash: signatureEntry?.signature ?? null,
+          transactionUrl: signatureEntry?.explorerUrl ?? null,
           transactionStatus: "confirmed",
           notaryAddress: item.notary,
           documentIdentifier,
