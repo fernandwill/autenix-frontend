@@ -139,7 +139,24 @@ export function DocumentSummaryCard({
                         variant="outline"
                         className="h-8 rounded-md px-2 text-xs"
                       >
-                        <Link to={`/documents/${document.id}`}>View Details</Link>
+                        <Link
+                          to={{
+                            pathname: `/documents/${document.id}`,
+                            search: (() => {
+                              const params = new URLSearchParams();
+                              if (document.transactionHash) {
+                                params.set("signature", document.transactionHash);
+                              }
+                              if (document.transactionUrl) {
+                                params.set("explorer", document.transactionUrl);
+                              }
+                              const query = params.toString();
+                              return query ? `?${query}` : "";
+                            })(),
+                          }}
+                        >
+                          View Details
+                        </Link>
                       </Button>
                     </td>
                   </tr>
