@@ -67,29 +67,46 @@ const ACCEPTED_TYPES = ["application/pdf"] as const;
 const MIN_VERSION = 0;
 const MAX_VERSION = 255;
 
+// Bound user-supplied versions to the valid 0–255 range enforced on-chain.
 const clampVersion = (value: number): number => {
-  if (!Number.isFinite(value)) return MIN_VERSION;
-  const normalized = Math.trunc(value);
+  const normalized = Number.isFinite(value) ? Math.trunc(value) : MIN_VERSION;
   return Math.min(Math.max(normalized, MIN_VERSION), MAX_VERSION);
 };
 
+// Convert an internal upload entry into the consumer-friendly document summary shape.
 const mapEntryToDocumentChange = (entry: UploadEntry): FileUploadDocumentChange => {
+  const {
+    id,
+    fileName,
+    uploadedAt: timestamp,
+    checksum,
+    binHash,
+    binFileName,
+    binFile,
+    version,
+    transactionHash,
+    transactionUrl,
+    transactionStatus,
+    notaryAddress,
+    transactionError,
+    error,
+  } = entry;
   const documentIdentifier = deriveDocumentIdentifier(entry);
 
   return {
-    id: documentIdentifier ?? entry.id,
-    fileName: entry.fileName,
-    timestamp: entry.uploadedAt,
-    checksum: entry.checksum ?? null,
-    binHash: entry.binHash ?? null,
-    binFileName: entry.binFileName ?? entry.binFile?.name ?? null,
-    version: entry.version ?? null,
-    transactionHash: entry.transactionHash ?? null,
-    transactionUrl: entry.transactionUrl ?? null,
-    transactionStatus: entry.transactionStatus ?? "idle",
-    notaryAddress: entry.notaryAddress ?? null,
+    id: documentIdentifier ?? id,
+    fileName,
+    timestamp,
+    checksum: checksum ?? null,
+    binHash: binHash ?? null,
+    binFileName: binFileName ?? binFile?.name ?? null,
+    version: version ?? null,
+    transactionHash: transactionHash ?? null,
+    transactionUrl: transactionUrl ?? null,
+    transactionStatus: transactionStatus ?? "idle",
+    notaryAddress: notaryAddress ?? null,
     documentIdentifier,
-    error: entry.transactionError ?? entry.error ?? null,
+    error: transactionError ?? error ?? null,
   };
 };
 
@@ -113,10 +130,9 @@ const formatBytes = (bytes: number) => {
   return `${size} ${units[power]}`;
 };
 
+// Compose the canonical document identifier when both notary and hash inputs are available.
 const deriveDocumentIdentifier = (entry: Pick<UploadEntry, "notaryAddress" | "binHash" | "version">): string | null => {
-  if (!entry.notaryAddress || !entry.binHash) {
-    return null;
-  }
+  if (!entry.notaryAddress || !entry.binHash) return null;
 
   try {
     return composeDocumentIdentifier({
@@ -172,22 +188,24 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
     };
   }, [address, signTransaction]);
 
+  // Normalize timestamps into milliseconds so sorting always prefers the newest documents.
+  const toTimestampMillis = useCallback((value?: string | null) => {
+    const parsed = Date.parse(value ?? "");
+    return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
+  }, []);
+
+  // Emit completed documents to parents ordered from newest to oldest.
   const emitDocumentsChange = useCallback(
     (documentsToEmit: FileUploadDocumentChange[]) => {
       if (!onDocumentsChange) return;
 
-      const sortedEntries = [...documentsToEmit].sort((a, b) => {
-        const aTime = Date.parse(a.timestamp ?? "");
-        const bTime = Date.parse(b.timestamp ?? "");
-        if (Number.isNaN(aTime) && Number.isNaN(bTime)) return 0;
-        if (Number.isNaN(aTime)) return 1;
-        if (Number.isNaN(bTime)) return -1;
-        return bTime - aTime;
-      });
+      const sortedEntries = [...documentsToEmit].sort(
+        (a, b) => toTimestampMillis(b.timestamp) - toTimestampMillis(a.timestamp),
+      );
 
       onDocumentsChange(sortedEntries);
     },
-    [onDocumentsChange],
+    [onDocumentsChange, toTimestampMillis],
   );
 
   useEffect(() => {
