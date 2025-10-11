@@ -1,6 +1,15 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, FileText, Loader2, ShieldCheck } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  Clock,
+  Copy,
+  FileText,
+  Loader2,
+  ShieldCheck,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -22,7 +31,15 @@ const loadSnapshot = (id: string): DocumentDetailSnapshot | null => {
   }
 };
 
-type MetaItem = { label: string; value: ReactNode; mono?: boolean };
+type CopyField = "binary" | "transaction";
+type MetaItem = {
+  label: string;
+  value: ReactNode;
+  mono?: boolean;
+  copyField?: CopyField;
+  copyValue?: string;
+  copyMessage?: string;
+};
 
 const STATUS_VISUALS = {
   success: {
@@ -55,6 +72,8 @@ export function DocumentDetailPage() {
   const [snapshot, setSnapshot] = useState<DocumentDetailSnapshot | null>(() =>
     entryId ? loadSnapshot(entryId) : null,
   );
+  const [copiedField, setCopiedField] = useState<CopyField | null>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!entryId || typeof window === "undefined") return;
@@ -70,6 +89,14 @@ export function DocumentDetailPage() {
     return () => window.removeEventListener("storage", handleStorage);
   }, [entryId]);
 
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) {
+        clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
+
   const statusVisuals = snapshot
     ? STATUS_VISUALS[snapshot.status as keyof typeof STATUS_VISUALS] ?? STATUS_VISUALS.default
     : null;
@@ -78,6 +105,29 @@ export function DocumentDetailPage() {
   const monoValueClass = "mt-1 break-all font-mono text-sm text-foreground";
   const defaultValueClass = "mt-1 break-words font-medium text-foreground";
   const labelClass = "text-xs font-semibold uppercase tracking-wider text-muted-foreground";
+
+  const copyToClipboard = (value: string | undefined | null) => {
+    if (!value) return;
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(value).catch(() => {
+        /* noop: clipboard unavailable */
+      });
+    }
+  };
+
+  const handleCopy = (field: CopyField, value?: string | null) => {
+    if (!value) return;
+    copyToClipboard(value);
+    setCopiedField(field);
+    if (copyTimerRef.current) {
+      clearTimeout(copyTimerRef.current);
+    }
+    copyTimerRef.current = setTimeout(() => {
+      setCopiedField(null);
+      copyTimerRef.current = null;
+    }, 3000);
+  };
+
   const metaColumns: MetaItem[][] | null = snapshot
     ? [
         [
@@ -90,7 +140,14 @@ export function DocumentDetailPage() {
           { label: "Uploaded at", value: snapshot.uploadedAtLabel },
           { label: "Checksum", value: snapshot.checksum ?? "Calculating...", mono: true },
           { label: "Binary file", value: snapshot.binFileName ?? "Generating...", mono: true },
-          { label: "Binary hash", value: snapshot.binHash ?? "Calculating...", mono: true },
+          {
+            label: "Binary hash",
+            value: snapshot.binHash ?? "Calculating...",
+            mono: true,
+            copyField: "binary",
+            copyValue: snapshot.binHash ?? undefined,
+            copyMessage: "Binary hash copied!",
+          },
           {
             label: "Transaction hash",
             value:
@@ -107,6 +164,9 @@ export function DocumentDetailPage() {
                 snapshot.transactionHash ?? "Awaiting confirmation..."
               ),
             mono: true,
+            copyField: snapshot.transactionHash ? "transaction" : undefined,
+            copyValue: snapshot.transactionHash ?? undefined,
+            copyMessage: "Transaction hash copied!",
           },
         ],
       ]
@@ -178,18 +238,49 @@ export function DocumentDetailPage() {
               </div>
             </div>
 
-            <div className="grid gap-6 px-8 py-10 md:grid-cols-2">
-              {metaColumns?.map((items, columnIndex) => (
-                <div key={columnIndex} className="space-y-4">
-                  {items.map(({ label, value, mono }) => (
-                    <div key={label}>
-                      <span className={labelClass}>{label}</span>
-                      <div className={mono ? monoValueClass : defaultValueClass}>{value}</div>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
+              <div className="grid gap-6 px-8 py-10 md:grid-cols-2">
+                {metaColumns?.map((items, columnIndex) => (
+                  <div key={columnIndex} className="space-y-4">
+                    {items.map(({ label, value, mono, copyField, copyValue, copyMessage }) => {
+                      const isCopied = copyField ? copiedField === copyField : false;
+
+                      return (
+                        <div key={label}>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className={labelClass}>{label}</span>
+                            <div className="flex items-center gap-2">
+                              {copyMessage ? (
+                                <div
+                                  className={`transition-all duration-300 ${
+                                    isCopied
+                                      ? "translate-y-0 scale-100 opacity-100"
+                                      : "-translate-y-1 scale-95 opacity-0"
+                                  } pointer-events-none rounded bg-emerald-100 px-2 py-1 text-xs text-emerald-700`}
+                                >
+                                  {copyMessage}
+                                </div>
+                              ) : null}
+                              {copyField && copyValue ? (
+                                <Button
+                                  aria-label={`Copy ${label.toLowerCase()}`}
+                                  className="h-6 w-6"
+                                  onClick={() => handleCopy(copyField, copyValue)}
+                                  size="icon"
+                                  type="button"
+                                  variant="ghost"
+                                >
+                                  <Copy aria-hidden className="h-3.5 w-3.5" />
+                                </Button>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div className={mono ? monoValueClass : defaultValueClass}>{value}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
           </div>
         ) : (
           <div className="mt-16 flex flex-1 flex-col items-center justify-center rounded-3xl border border-dashed border-border bg-card p-10 text-center shadow-sm">

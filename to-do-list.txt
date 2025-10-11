@@ -1,4 +1,6 @@
-1. Cleanup unused code (wagmi.ts) - done
-2. No need to call localhost:5173/api/convert/pdf-to-bin/ - done
-3. Code too long (shorten) "Please refactor code to make it shorter while maintaining functionality" - done
-4. Push after done.
+Change to make:
+1. Versioning should start from 1, not 0
+2. No need to display the field of 'Binary File'
+3. Add a copy button at the end of the binary hash value
+4. Remove the vertical scrollbar
+5. Add a green checklist to 'Signature confirmed'
