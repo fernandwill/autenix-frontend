@@ -73,21 +73,25 @@ const clampVersion = (value: number): number => {
   return Math.min(Math.max(normalized, MIN_VERSION), MAX_VERSION);
 };
 
-const mapEntryToDocumentChange = (entry: UploadEntry): FileUploadDocumentChange => ({
-  id: entry.id,
-  fileName: entry.fileName,
-  timestamp: entry.uploadedAt,
-  checksum: entry.checksum ?? null,
-  binHash: entry.binHash ?? null,
-  binFileName: entry.binFileName ?? entry.binFile?.name ?? null,
-  version: entry.version ?? null,
-  transactionHash: entry.transactionHash ?? null,
-  transactionUrl: entry.transactionUrl ?? null,
-  transactionStatus: entry.transactionStatus ?? "idle",
-  notaryAddress: entry.notaryAddress ?? null,
-  documentIdentifier: deriveDocumentIdentifier(entry),
-  error: entry.transactionError ?? entry.error ?? null,
-});
+const mapEntryToDocumentChange = (entry: UploadEntry): FileUploadDocumentChange => {
+  const documentIdentifier = deriveDocumentIdentifier(entry);
+
+  return {
+    id: documentIdentifier ?? entry.id,
+    fileName: entry.fileName,
+    timestamp: entry.uploadedAt,
+    checksum: entry.checksum ?? null,
+    binHash: entry.binHash ?? null,
+    binFileName: entry.binFileName ?? entry.binFile?.name ?? null,
+    version: entry.version ?? null,
+    transactionHash: entry.transactionHash ?? null,
+    transactionUrl: entry.transactionUrl ?? null,
+    transactionStatus: entry.transactionStatus ?? "idle",
+    notaryAddress: entry.notaryAddress ?? null,
+    documentIdentifier,
+    error: entry.transactionError ?? entry.error ?? null,
+  };
+};
 
 // Determine whether the provided file is a supported PDF document.
 const isPdfFile = (file: File) =>
