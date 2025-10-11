@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import type { FileUploadDocumentChange } from "@/components/file-upload";
 
 interface DocumentSummaryCardProps {
@@ -32,7 +34,7 @@ const formatTransactionHash = (document: FileUploadDocumentChange): ReactNode =>
         href={document.transactionUrl}
         target="_blank"
         rel="noreferrer"
-        className="text-primary underline underline-offset-2"
+        className="break-all text-primary underline underline-offset-2"
       >
         {document.transactionHash}
       </a>
@@ -67,6 +69,7 @@ export function DocumentSummaryCard({ documents }: DocumentSummaryCardProps) {
                   <th className="w-1/4 py-3 font-medium">Created at</th>
                   <th className="w-1/3 py-3 font-medium">Checksum</th>
                   <th className="w-1/3 py-3 font-medium">Transaction hash</th>
+                  <th className="w-24 py-3 text-right font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -75,11 +78,16 @@ export function DocumentSummaryCard({ documents }: DocumentSummaryCardProps) {
                     <td className="py-3 align-top font-medium text-foreground">
                       {formatTimestamp(document.timestamp)}
                     </td>
-                    <td className="py-3 align-top font-mono text-xs text-foreground">
+                    <td className="break-all py-3 align-top font-mono text-xs text-foreground">
                       {formatChecksum(document.checksum)}
                     </td>
-                    <td className="py-3 align-top font-mono text-xs text-foreground">
+                    <td className="break-all py-3 align-top font-mono text-xs text-foreground">
                       {formatTransactionHash(document)}
+                    </td>
+                    <td className="py-3 align-top text-right">
+                      <Button asChild size="sm" variant="outline">
+                        <Link to={`/documents/${document.id}`}>View Details</Link>
+                      </Button>
                     </td>
                   </tr>
                 ))}
