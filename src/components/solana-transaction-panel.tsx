@@ -29,7 +29,10 @@ export function SolanaTransactionPanel({ className }: SolanaTransactionPanelProp
       <Button
         type="button"
         variant={connectionCopy.buttonVariant}
-        className="min-w-[240px] items-center justify-between gap-3"
+        className={cn(
+          "min-w-[180px] items-center justify-between gap-2 px-4",
+          isConnected ? "hover:border-destructive hover:bg-destructive hover:text-destructive-foreground" : "",
+        )}
         disabled={isConnecting}
         onClick={connectionCopy.action}
       >
@@ -37,10 +40,12 @@ export function SolanaTransactionPanel({ className }: SolanaTransactionPanelProp
           {isConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
           <span className="font-semibold">{connectionCopy.buttonLabel}</span>
         </span>
-        {isConnected && address ? (
-          <span className="ml-4 max-w-[180px] truncate text-xs font-mono text-muted-foreground">{address}</span>
-        ) : null}
       </Button>
+      {isConnected && address ? (
+        <div className="w-full text-right">
+          <span className="block truncate text-xs font-mono text-muted-foreground">{address}</span>
+        </div>
+      ) : null}
       {connectError ? (
         <p className="text-xs text-destructive" role="status">
           {connectError}
