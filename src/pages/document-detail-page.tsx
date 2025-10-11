@@ -9,7 +9,9 @@ import {
   FileText,
   Loader2,
   ShieldCheck,
+  XCircle,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -41,30 +43,102 @@ type MetaItem = {
   copyMessage?: string;
 };
 
-const STATUS_VISUALS = {
+type StatusVisual = {
+  icon: LucideIcon;
+  badgeClass: string;
+  iconClass: string;
+  label: string;
+};
+
+type BaseStatusVisual = Omit<StatusVisual, "label">;
+
+const STATUS_VISUALS: Record<"success" | "error" | "converting" | "default", BaseStatusVisual> = {
   success: {
     icon: CheckCircle2,
     badgeClass:
       "border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-500/10 dark:text-emerald-300",
+    iconClass: "h-4 w-4",
   },
   error: {
     icon: AlertTriangle,
     badgeClass:
       "border-rose-200 bg-rose-100 text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300",
+    iconClass: "h-4 w-4",
   },
   converting: {
     icon: Loader2,
     badgeClass:
       "border-sky-200 bg-sky-100 text-sky-700 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-300",
+    iconClass: "h-4 w-4 animate-spin",
   },
   default: {
     icon: Clock,
     badgeClass:
       "border-border bg-muted text-muted-foreground dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200",
+    iconClass: "h-4 w-4",
   },
 } as const;
 
-const formatVersion = (value: number | null) => (value ?? "Not set").toString();
+const SIGNATURE_STATUS_VISUALS: Record<"confirmed" | "error", StatusVisual> = {
+  confirmed: {
+    icon: CheckCircle2,
+    badgeClass:
+      "border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-500/10 dark:text-emerald-300",
+    iconClass: "h-4 w-4",
+    label: "Signature confirmed",
+  },
+  error: {
+    icon: XCircle,
+    badgeClass:
+      "border-rose-200 bg-rose-100 text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300",
+    iconClass: "h-4 w-4",
+    label: "Signature failed",
+  },
+} as const;
+
+const deriveStatusVisual = (snapshot: DocumentDetailSnapshot | null): StatusVisual | null => {
+  if (!snapshot) return null;
+
+  const transactionStatus =
+    snapshot.transactionStatus ??
+    (snapshot.transactionHash ? "confirmed" : snapshot.error ? "error" : "idle");
+
+  const baseKey = snapshot.status as keyof typeof STATUS_VISUALS;
+  const fallback = STATUS_VISUALS[baseKey] ?? STATUS_VISUALS.default;
+
+  if (snapshot.status === "success" && transactionStatus === "confirmed") {
+    return SIGNATURE_STATUS_VISUALS.confirmed;
+  }
+
+  if (transactionStatus === "error") {
+    return SIGNATURE_STATUS_VISUALS.error;
+  }
+
+  return {
+    ...fallback,
+    label: snapshot.statusLabel,
+  };
+};
+
+const deriveStatusDescription = (snapshot: DocumentDetailSnapshot | null): string | null => {
+  if (!snapshot) return null;
+
+  const transactionStatus =
+    snapshot.transactionStatus ??
+    (snapshot.transactionHash ? "confirmed" : snapshot.error ? "error" : "idle");
+
+  if (snapshot.status === "error" || transactionStatus === "error") {
+    const cause = snapshot.error?.trim();
+    return cause ? `Your document failed to be notarized. ${cause}` : "Your document failed to be notarized.";
+  }
+
+  return snapshot.statusDescription;
+};
+
+const formatVersion = (value: number | null) => {
+  if (value == null) return "Not set";
+  return (value + 1).toString();
+};
 
 // DocumentDetailPage renders the persisted upload metadata for a specific entry.
 export function DocumentDetailPage() {
@@ -97,10 +171,11 @@ export function DocumentDetailPage() {
     };
   }, []);
 
-  const statusVisuals = snapshot
-    ? STATUS_VISUALS[snapshot.status as keyof typeof STATUS_VISUALS] ?? STATUS_VISUALS.default
-    : null;
-  const statusIconClass = snapshot?.status === "converting" ? "h-4 w-4 animate-spin" : "h-4 w-4";
+  const statusVisuals = deriveStatusVisual(snapshot);
+  const statusDescription = deriveStatusDescription(snapshot);
+  const transactionStatus =
+    snapshot?.transactionStatus ??
+    (snapshot?.transactionHash ? "confirmed" : snapshot?.error ? "error" : "idle");
 
   const monoValueClass = "mt-1 break-all font-mono text-sm text-foreground";
   const defaultValueClass = "mt-1 break-words font-medium text-foreground";
@@ -151,22 +226,28 @@ export function DocumentDetailPage() {
           {
             label: "Transaction hash",
             value:
-              snapshot.transactionUrl && snapshot.transactionHash ? (
-                <a
-                  href={snapshot.transactionUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-primary underline underline-offset-2"
-                >
-                  {snapshot.transactionHash}
-                </a>
-              ) : (
-                snapshot.transactionHash ?? "Awaiting confirmation..."
-              ),
+              transactionStatus === "error"
+                ? "Not available"
+                : snapshot?.transactionUrl && snapshot.transactionHash
+                  ? (
+                      <a
+                        href={snapshot.transactionUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary underline underline-offset-2"
+                      >
+                        {snapshot.transactionHash}
+                      </a>
+                    )
+                  : snapshot.transactionHash ?? "Awaiting confirmation...",
             mono: true,
-            copyField: snapshot.transactionHash ? "transaction" : undefined,
-            copyValue: snapshot.transactionHash ?? undefined,
-            copyMessage: "Transaction hash copied!",
+            copyField: transactionStatus === "error" || !snapshot?.transactionHash ? undefined : "transaction",
+            copyValue:
+              transactionStatus === "error" ? undefined : snapshot?.transactionHash ?? undefined,
+            copyMessage:
+              transactionStatus === "error" || !snapshot?.transactionHash
+                ? undefined
+                : "Transaction hash copied!",
           },
         ],
       ]
@@ -209,8 +290,8 @@ export function DocumentDetailPage() {
                     <span
                       className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm font-semibold ${statusVisuals.badgeClass}`}
                     >
-                      <statusVisuals.icon className={statusIconClass} />
-                      {snapshot.statusLabel}
+                      <statusVisuals.icon className={statusVisuals.iconClass} />
+                      {statusVisuals.label}
                     </span>
                   ) : null}
 
@@ -220,7 +301,9 @@ export function DocumentDetailPage() {
                   </span>
                 </div>
 
-                <p className="max-w-xl text-sm text-muted-foreground">{snapshot.statusDescription}</p>
+                {statusDescription ? (
+                  <p className="max-w-xl text-sm text-muted-foreground">{statusDescription}</p>
+                ) : null}
 
                 {snapshot.error ? (
                   <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300">

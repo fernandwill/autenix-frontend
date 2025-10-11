@@ -14,7 +14,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { buildDetailStorageKey, type DocumentDetailSnapshot, type UploadStatus } from "@/lib/upload-types";
+import {
+  buildDetailStorageKey,
+  type DocumentDetailSnapshot,
+  type TransactionStatus,
+  type UploadStatus,
+} from "@/lib/upload-types";
 import { cn } from "@/lib/utils";
 import { getSolanaClient } from "@/lib/solana/client";
 import { submitNotarizationTransaction } from "@/lib/solana/transactions";
@@ -30,7 +35,7 @@ export type FileUploadDocumentChange = {
   version: number | null;
   transactionHash: string | null;
   transactionUrl: string | null;
-  transactionStatus: "idle" | "pending" | "confirmed" | "cancelled" | "error";
+  transactionStatus: TransactionStatus;
   error?: string | null;
 };
 
@@ -55,7 +60,7 @@ interface UploadEntry {
   error?: string;
   transactionHash?: string;
   transactionUrl?: string | null;
-  transactionStatus?: FileUploadDocumentChange["transactionStatus"];
+  transactionStatus?: TransactionStatus;
   transactionError?: string;
 }
 
@@ -74,7 +79,7 @@ type PersistedUploadEntry = {
   error?: string;
   transactionHash?: string;
   transactionUrl?: string | null;
-  transactionStatus?: FileUploadDocumentChange["transactionStatus"];
+  transactionStatus?: TransactionStatus;
   transactionError?: string;
 };
 
@@ -173,7 +178,8 @@ const createDetailSnapshot = (entry: UploadEntry): DocumentDetailSnapshot => {
     version: entry.version ?? null,
     transactionHash: entry.transactionHash ?? null,
     transactionUrl: entry.transactionUrl ?? null,
-    error: entry.error ?? null,
+    transactionStatus: entry.transactionStatus ?? "idle",
+    error: entry.transactionError ?? entry.error ?? null,
   };
 };
 
@@ -266,7 +272,7 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
           version: document.version ?? null,
           transactionHash: document.transactionHash ?? null,
           transactionUrl: document.transactionUrl ?? null,
-          transactionStatus: (document.transactionStatus ?? "idle") as FileUploadDocumentChange["transactionStatus"],
+          transactionStatus: (document.transactionStatus ?? "idle") as TransactionStatus,
           error: document.error ?? null,
         });
       });
@@ -401,6 +407,7 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
           progress: 0,
           transactionStatus: "error",
           transactionError: message,
+          transactionHash: null,
           transactionUrl: null,
         });
       };
@@ -481,6 +488,7 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
           syncEntry({
             transactionStatus: "error",
             transactionError: "Binary hash unavailable. Unable to submit notarization.",
+            transactionHash: null,
             transactionUrl: null,
           });
           return;
@@ -523,6 +531,7 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
           syncEntry({
             transactionStatus: "error",
             transactionError: message,
+            transactionHash: null,
             transactionUrl: null,
           });
         }
@@ -570,7 +579,7 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
         progress: 0,
         status: "idle" as UploadStatus,
         uploadedAt: new Date().toISOString(),
-        transactionStatus: "idle" as FileUploadDocumentChange["transactionStatus"],
+        transactionStatus: "idle" as TransactionStatus,
         binFile: null,
         binFileName: deriveBinFileName(file.name),
         version: targetVersion,
@@ -662,7 +671,7 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
             aria-describedby="document-version-helper"
           />
           <p id="document-version-helper" className="text-xs text-muted-foreground">
-            Applied to new uploads. Accepts whole numbers between {MIN_VERSION} and {MAX_VERSION}.
+            Applied to new uploads. Accepts only whole number (ex. 1).
           </p>
         </div>
 
@@ -766,7 +775,7 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
 
                     <div className="space-y-1 text-xs text-muted-foreground">
                       <p>
-                        Version: <span className="font-mono">{entry.version}</span>
+                        Version: <span className="font-mono">{entry.version + 1}</span>
                       </p>
                       <p className="break-all">
                         Checksum:{" "}

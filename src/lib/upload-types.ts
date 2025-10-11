@@ -1,4 +1,5 @@
 export type UploadStatus = "idle" | "converting" | "success" | "error";
+export type TransactionStatus = "idle" | "pending" | "confirmed" | "cancelled" | "error";
 
 export type DocumentDetailSnapshot = {
   id: string;
@@ -15,6 +16,7 @@ export type DocumentDetailSnapshot = {
   binFileName: string | null;
   transactionHash: string | null;
   transactionUrl: string | null;
+  transactionStatus?: TransactionStatus;
   error: string | null;
 };
 
