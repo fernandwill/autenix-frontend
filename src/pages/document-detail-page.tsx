@@ -162,6 +162,7 @@ export function DocumentDetailPage() {
   );
   const [snapshot, setSnapshot] = useState<DocumentDetailSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isContentVisible, setIsContentVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<CopyField | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -183,6 +184,8 @@ export function DocumentDetailPage() {
       }
 
       setLoading(true);
+      setIsContentVisible(false);
+      setSnapshot(null);
       setErrorMessage(null);
 
       try {
@@ -228,6 +231,12 @@ export function DocumentDetailPage() {
           hashVersion: details.hashVersion,
           bump: details.bump,
           additional: details.additional,
+        });
+
+        requestAnimationFrame(() => {
+          if (!cancelled) {
+            setIsContentVisible(true);
+          }
         });
       } catch (error) {
         if (cancelled) return;
@@ -388,7 +397,11 @@ export function DocumentDetailPage() {
         </div>
 
         {snapshot ? (
-          <div className="mt-10 overflow-hidden rounded-3xl bg-card shadow-xl ring-1 ring-border">
+          <div
+            className={`mt-10 overflow-hidden rounded-3xl bg-card shadow-xl ring-1 ring-border transition-all duration-500 ${
+              isContentVisible ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"
+            }`}
+          >
             <div className="flex flex-col gap-8 border-b border-border px-8 py-10 md:flex-row md:items-start md:justify-between">
               <div className="flex-1 space-y-6">
                 <div>
@@ -481,7 +494,7 @@ export function DocumentDetailPage() {
               </div>
           </div>
         ) : (
-          <div className="mt-16 flex flex-1 flex-col items-center justify-center rounded-3xl border border-dashed border-border bg-card p-10 text-center shadow-sm">
+          <div className="mt-16 flex flex-1 flex-col items-center justify-center rounded-3xl border border-dashed border-border bg-card p-10 text-center shadow-sm transition-all duration-500 animate-in fade-in slide-in-from-bottom-4">
             {loading ? (
               <>
                 <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
