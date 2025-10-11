@@ -44,10 +44,10 @@ function HomePage() {
                 </Button>
               </div>
             </div>
+            <DocumentSummaryCard documents={documents} />
           </div>
           <div className="space-y-6">
             <SolanaTransactionPanel />
-            <DocumentSummaryCard documents={documents} />
           </div>
         </div>
       </main>
