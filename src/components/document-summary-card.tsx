@@ -66,27 +66,24 @@ export function DocumentSummaryCard({ documents }: DocumentSummaryCardProps) {
             <table className="min-w-full table-fixed text-left text-sm">
               <thead>
                 <tr className="border-b border-border text-muted-foreground">
-                  <th className="w-1/4 py-3 font-medium">Created at</th>
-                  <th className="w-1/3 py-3 font-medium">Checksum</th>
-                  <th className="w-1/3 py-3 font-medium">Transaction hash</th>
-                  <th className="w-20 py-3 text-right font-medium">
-                    <span className="sr-only">Details</span>
-                  </th>
+                  <th className="w-1/4 px-4 py-3 font-medium">Created at</th>
+                  <th className="w-1/3 px-4 py-3 font-medium">Checksum</th>
+                  <th className="w-1/3 px-4 py-3 font-medium">Transaction hash</th>
                 </tr>
               </thead>
               <tbody>
                 {sortedDocuments.map((document) => (
                   <tr key={document.id} className="border-b border-border last:border-b-0">
-                    <td className="py-3 align-top font-medium text-foreground">
+                    <td className="px-4 py-3 align-top font-medium text-foreground">
                       {formatTimestamp(document.timestamp)}
                     </td>
-                    <td className="break-all py-3 align-top font-mono text-xs text-foreground">
+                    <td className="break-all px-4 py-3 align-top font-mono text-xs text-foreground">
                       {formatChecksum(document.checksum)}
                     </td>
-                    <td className="break-all py-3 align-top font-mono text-xs text-foreground">
+                    <td className="break-all px-4 py-3 align-top font-mono text-xs text-foreground">
                       {formatTransactionHash(document)}
                     </td>
-                    <td className="py-3 align-top text-right">
+                    <td className="px-4 py-3 align-top text-right">
                       <Button
                         asChild
                         size="sm"
