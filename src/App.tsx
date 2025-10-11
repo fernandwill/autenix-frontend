@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useState, type KeyboardEventHandler } from "react";
+import { useCallback, useEffect, useMemo, useState, type KeyboardEventHandler } from "react";
 import { Route, Routes, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 
 // Main application layout stitches together uploads, hash lookup, and Solana status.
 import { FileUpload, type FileUploadDocumentChange } from "@/components/file-upload";
@@ -9,13 +10,122 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { DocumentDetailPage } from "@/pages/document-detail-page";
+import { getSolanaClient } from "@/lib/solana/client";
+import { listNotarizationAccountsByNotary } from "@/lib/solana/notarization-account";
+import { composeDocumentIdentifier } from "@/lib/upload-types";
+import { useSolanaWallet } from "@/lib/solana/wallet-context";
 
 // HomePage combines upload, search, and wallet status workflows.
 function HomePage() {
-  const [documents, setDocuments] = useState<FileUploadDocumentChange[]>([]);
+  const [localDocuments, setLocalDocuments] = useState<FileUploadDocumentChange[]>([]);
   const [searchValue, setSearchValue] = useState("");
   const [searchError, setSearchError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const { address } = useSolanaWallet();
+
+  const {
+    data: walletDocumentsData,
+    isFetching: isFetchingWalletDocuments,
+    isError: isWalletDocumentsError,
+    error: walletDocumentsError,
+    refetch: refetchWalletDocuments,
+  } = useQuery({
+    queryKey: ["wallet-notarized-documents", address],
+    queryFn: async () => {
+      if (!address) return [] as FileUploadDocumentChange[];
+
+      const client = getSolanaClient();
+      const notarizations = await listNotarizationAccountsByNotary({
+        client,
+        notary: address,
+      });
+
+      return notarizations.map((item) => {
+        const documentIdentifier = composeDocumentIdentifier({
+          notary: item.notary,
+          hash: item.hash,
+          version: item.version,
+        });
+
+        const timestamp = Number.isFinite(item.timestamp)
+          ? new Date(item.timestamp * 1000).toISOString()
+          : new Date().toISOString();
+
+        const normalizedName = item.documentName.replace(/\.bin$/i, ".pdf");
+
+        return {
+          id: documentIdentifier,
+          fileName: normalizedName,
+          timestamp,
+          checksum: item.hash,
+          binHash: item.hash,
+          binFileName: item.documentName,
+          version: item.version,
+          transactionHash: null,
+          transactionUrl: null,
+          transactionStatus: "confirmed",
+          notaryAddress: item.notary,
+          documentIdentifier,
+          error: null,
+        } satisfies FileUploadDocumentChange;
+      });
+    },
+    enabled: Boolean(address),
+    staleTime: 30_000,
+  });
+
+  const walletDocuments = useMemo(
+    () => (address ? walletDocumentsData ?? [] : []),
+    [address, walletDocumentsData],
+  );
+  const walletDocumentsErrorMessage = isWalletDocumentsError
+    ? walletDocumentsError instanceof Error
+      ? walletDocumentsError.message
+      : "Failed to load notarized documents from the blockchain."
+    : null;
+
+  useEffect(() => {
+    if (!address) return;
+    if (!localDocuments.length) return;
+
+    const existingIds = new Set(
+      walletDocuments.map((document) => document.documentIdentifier).filter(Boolean) as string[],
+    );
+
+    const hasNewConfirmedDocument = localDocuments.some((document) => {
+      if (!document.documentIdentifier) return false;
+      if (document.transactionStatus !== "confirmed") return false;
+      return !existingIds.has(document.documentIdentifier);
+    });
+
+    if (hasNewConfirmedDocument) {
+      void refetchWalletDocuments();
+    }
+  }, [address, localDocuments, walletDocuments, refetchWalletDocuments]);
+
+  const documents = useMemo(() => {
+    const indexed = new Map<string, FileUploadDocumentChange>();
+
+    walletDocuments.forEach((document) => {
+      if (document.documentIdentifier) {
+        indexed.set(document.documentIdentifier, document);
+      }
+    });
+
+    const unresolved: FileUploadDocumentChange[] = [];
+
+    localDocuments.forEach((document) => {
+      const key = document.documentIdentifier;
+      if (key) {
+        const existing = indexed.get(key);
+        indexed.set(key, existing ? { ...existing, ...document } : document);
+      } else {
+        unresolved.push(document);
+      }
+    });
+
+    return [...indexed.values(), ...unresolved];
+  }, [localDocuments, walletDocuments]);
 
   const hashLookup = useMemo(() => {
     const map = new Map<string, FileUploadDocumentChange>();
@@ -101,7 +211,7 @@ function HomePage() {
       <main className="flex flex-1 justify-center px-4 pb-12 pt-28 sm:pt-32">
         <div className="flex w-full max-w-5xl flex-col gap-8">
           {/* File uploader remains the primary document ingestion path. */}
-          <FileUpload onDocumentsChange={setDocuments} />
+          <FileUpload onDocumentsChange={setLocalDocuments} />
           {/* Divider offers a visual cue before the hash lookup path. */}
           <div className="flex items-center gap-4 text-xs font-semibold uppercase text-muted-foreground">
             <div className="h-px flex-1 bg-muted-foreground/40" aria-hidden="true" />
@@ -131,7 +241,12 @@ function HomePage() {
               </p>
             ) : null}
           </div>
-          <DocumentSummaryCard documents={documents} />
+          <DocumentSummaryCard
+            documents={documents}
+            isLoading={isFetchingWalletDocuments}
+            error={walletDocumentsErrorMessage}
+            walletAddress={address}
+          />
         </div>
       </main>
     </div>
