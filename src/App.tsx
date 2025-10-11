@@ -55,7 +55,24 @@ function HomePage() {
 
     setSearchError(null);
     setSearchValue("");
-    navigate(`/documents/${encodeURIComponent(match.id)}`);
+    if (!match.documentIdentifier) {
+      setSearchError("The selected document does not have on-chain details yet. Try again after notarization completes.");
+      return;
+    }
+
+    const searchParams = new URLSearchParams();
+    if (match.transactionHash) {
+      searchParams.set("signature", match.transactionHash);
+    }
+    if (match.transactionUrl) {
+      searchParams.set("explorer", match.transactionUrl);
+    }
+
+    const search = searchParams.toString();
+    navigate({
+      pathname: `/documents/${encodeURIComponent(match.documentIdentifier)}`,
+      search: search ? `?${search}` : undefined,
+    });
   }, [hashLookup, navigate, searchValue]);
 
   const handleInputChange = useCallback((value: string) => {
@@ -126,7 +143,7 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
-      <Route path="/documents/:entryId" element={<DocumentDetailPage />} />
+      <Route path="/documents/:documentId" element={<DocumentDetailPage />} />
     </Routes>
   );
 }

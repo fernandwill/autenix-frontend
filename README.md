@@ -3,6 +3,7 @@
 This project is a Vite powered React application used to explore notarization workflows. It now includes:
 
 - A streamlined document upload flow with checksum and hash previews.
+- Direct document detail hydration from the Solana blockchain using the notarization program accounts—no `localStorage` snapshots are required.
 - A Solana transaction demo panel that relies on the **Gill SDK** to craft and submit memo transactions.
 
 ## Development

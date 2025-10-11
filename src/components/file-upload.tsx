@@ -14,12 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import {
-  buildDetailStorageKey,
-  type DocumentDetailSnapshot,
-  type TransactionStatus,
-  type UploadStatus,
-} from "@/lib/upload-types";
+import { composeDocumentIdentifier, type TransactionStatus, type UploadStatus } from "@/lib/upload-types";
 import { cn } from "@/lib/utils";
 import { getSolanaClient } from "@/lib/solana/client";
 import { submitNotarizationTransaction } from "@/lib/solana/transactions";
@@ -36,6 +31,8 @@ export type FileUploadDocumentChange = {
   transactionHash: string | null;
   transactionUrl: string | null;
   transactionStatus: TransactionStatus;
+  notaryAddress: string | null;
+  documentIdentifier: string | null;
   error?: string | null;
 };
 
@@ -62,26 +59,8 @@ interface UploadEntry {
   transactionUrl?: string | null;
   transactionStatus?: TransactionStatus;
   transactionError?: string;
+  notaryAddress?: Address<string> | null;
 }
-
-type PersistedUploadEntry = {
-  id: string;
-  fileName: string;
-  fileSize: number;
-  fileType: string;
-  progress: number;
-  status: UploadStatus;
-  uploadedAt: string;
-  checksum?: string;
-  binHash?: string;
-  binFileName?: string;
-  version?: number;
-  error?: string;
-  transactionHash?: string;
-  transactionUrl?: string | null;
-  transactionStatus?: TransactionStatus;
-  transactionError?: string;
-};
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const ACCEPTED_TYPES = ["application/pdf"] as const;
@@ -105,6 +84,8 @@ const mapEntryToDocumentChange = (entry: UploadEntry): FileUploadDocumentChange 
   transactionHash: entry.transactionHash ?? null,
   transactionUrl: entry.transactionUrl ?? null,
   transactionStatus: entry.transactionStatus ?? "idle",
+  notaryAddress: entry.notaryAddress ?? null,
+  documentIdentifier: deriveDocumentIdentifier(entry),
   error: entry.transactionError ?? entry.error ?? null,
 });
 
@@ -112,10 +93,6 @@ const mapEntryToDocumentChange = (entry: UploadEntry): FileUploadDocumentChange 
 const isPdfFile = (file: File) =>
   ACCEPTED_TYPES.includes(file.type as (typeof ACCEPTED_TYPES)[number]) ||
   file.name.toLowerCase().endsWith(".pdf");
-
-const DETAIL_STORAGE_AVAILABLE = typeof window !== "undefined" && "localStorage" in window;
-const ENTRY_STORAGE_KEY = "file-upload-entries";
-const COMPLETED_STORAGE_KEY = "file-upload-completed-documents";
 
 // Generate the default .bin filename that mirrors the uploaded PDF name.
 const deriveBinFileName = (fileName: string) => {
@@ -132,69 +109,23 @@ const formatBytes = (bytes: number) => {
   return `${size} ${units[power]}`;
 };
 
-const STATUS_META: Record<UploadStatus | "default", { label: string; description: string }> = {
-  success: {
-    label: "Converted",
-    description: "Your document has been notarized and its binary hash is ready to be published on-chain.",
-  },
-  converting: {
-    label: "Converting",
-    description: "Conversion is running. You can leave this tab open while the process completes.",
-  },
-  error: {
-    label: "Error",
-    description: "We were unable to convert this document. Review the status information below.",
-  },
-  idle: {
-    label: "Queued",
-    description: "Conversion is running. You can leave this tab open while the process completes.",
-  },
-  default: {
-    label: "Queued",
-    description: "Conversion is running. You can leave this tab open while the process completes.",
-  },
-};
-
-// Provide user-facing status metadata for the supplied upload status.
-const getStatusMeta = (status: UploadStatus) => STATUS_META[status] ?? STATUS_META.default;
-
-// Prepare a snapshot of an upload entry for detail pages and storage.
-const createDetailSnapshot = (entry: UploadEntry): DocumentDetailSnapshot => {
-  const uploadedAtLabel = entry.uploadedAt ? new Date(entry.uploadedAt).toLocaleString() : "Unavailable";
-  const { label, description } = getStatusMeta(entry.status);
-
-  return {
-    id: entry.id,
-    fileName: entry.fileName,
-    sizeLabel: formatBytes(entry.fileSize),
-    uploadedAt: entry.uploadedAt,
-    uploadedAtLabel,
-    status: entry.status,
-    statusLabel: label,
-    statusDescription: description,
-    checksum: entry.checksum ?? null,
-    binHash: entry.binHash ?? null,
-    binFileName: entry.binFileName ?? entry.binFile?.name ?? null,
-    version: entry.version ?? null,
-    transactionHash: entry.transactionHash ?? null,
-    transactionUrl: entry.transactionUrl ?? null,
-    transactionStatus: entry.transactionStatus ?? "idle",
-    error: entry.transactionError ?? entry.error ?? null,
-  };
-};
-
-// Save the entry snapshot so the detail page can be hydrated from localStorage.
-const persistDetailSnapshot = (entry: UploadEntry) => {
-  if (!DETAIL_STORAGE_AVAILABLE) return;
+const deriveDocumentIdentifier = (entry: Pick<UploadEntry, "notaryAddress" | "binHash" | "version">): string | null => {
+  if (!entry.notaryAddress || !entry.binHash) {
+    return null;
+  }
 
   try {
-    const key = buildDetailStorageKey(entry.id);
-    const snapshot = createDetailSnapshot(entry);
-    window.localStorage.setItem(key, JSON.stringify(snapshot));
+    return composeDocumentIdentifier({
+      notary: entry.notaryAddress,
+      hash: entry.binHash,
+      version: entry.version,
+    });
   } catch (error) {
-    console.warn("Failed to persist document detail snapshot.", error);
+    console.warn("Failed to compose document identifier.", error);
+    return null;
   }
 };
+
 
 // Represent an array buffer as a hex string for hashes.
 const arrayBufferToHex = (buffer: ArrayBuffer) =>
@@ -221,68 +152,8 @@ const computeDigestsFromBuffer = async (buffer: ArrayBuffer) => {
 
 // FileUpload coordinates PDF ingestion, notarization, and status updates.
 export function FileUpload({ onDocumentsChange }: FileUploadProps) {
-  const [entries, setEntries] = useState<UploadEntry[]>(() => {
-    if (!DETAIL_STORAGE_AVAILABLE) {
-      return [];
-    }
-
-    try {
-      const stored = window.localStorage.getItem(ENTRY_STORAGE_KEY);
-      if (!stored) return [];
-
-      const parsed: PersistedUploadEntry[] = JSON.parse(stored);
-      return parsed.map((entry) => ({
-        ...entry,
-        file: null,
-        binFile: null,
-        fileType: entry.fileType ?? "application/pdf",
-        version: clampVersion(entry.version ?? 1),
-      } satisfies UploadEntry));
-    } catch (error) {
-      console.warn("Failed to restore stored uploads.", error);
-      return [];
-    }
-  });
-  const [completedDocuments, setCompletedDocuments] = useState<FileUploadDocumentChange[]>(() => {
-    if (!DETAIL_STORAGE_AVAILABLE) {
-      return [];
-    }
-
-    try {
-      const stored = window.localStorage.getItem(COMPLETED_STORAGE_KEY);
-      if (!stored) return [];
-
-      const parsed = JSON.parse(stored) as unknown;
-      if (!Array.isArray(parsed)) return [];
-
-      const restored: FileUploadDocumentChange[] = [];
-      parsed.forEach((item) => {
-        const document = item as Partial<FileUploadDocumentChange>;
-        if (!document || typeof document !== "object" || typeof document.id !== "string") {
-          return;
-        }
-
-        restored.push({
-          id: document.id,
-          fileName: document.fileName ?? "Untitled document",
-          timestamp: document.timestamp ?? new Date().toISOString(),
-          checksum: document.checksum ?? null,
-          binHash: document.binHash ?? null,
-          binFileName: document.binFileName ?? null,
-          version: document.version ?? null,
-          transactionHash: document.transactionHash ?? null,
-          transactionUrl: document.transactionUrl ?? null,
-          transactionStatus: (document.transactionStatus ?? "idle") as TransactionStatus,
-          error: document.error ?? null,
-        });
-      });
-
-      return restored;
-    } catch (error) {
-      console.warn("Failed to restore stored documents.", error);
-      return [];
-    }
-  });
+  const [entries, setEntries] = useState<UploadEntry[]>([]);
+  const [completedDocuments, setCompletedDocuments] = useState<FileUploadDocumentChange[]>([]);
   const [documentVersion, setDocumentVersion] = useState<number>(1);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const client = useMemo(() => getSolanaClient(), []);
@@ -319,60 +190,16 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
     emitDocumentsChange(completedDocuments);
   }, [completedDocuments, emitDocumentsChange]);
 
-  useEffect(() => {
-    if (!DETAIL_STORAGE_AVAILABLE) {
+  // Open the per-document detail page, falling back to same-tab navigation.
+  const openEntryDetails = useCallback((entry: UploadEntry) => {
+    const identifier = deriveDocumentIdentifier(entry);
+
+    if (!identifier) {
+      console.warn("Document identifier unavailable for entry", entry.id);
       return;
     }
 
-    entries.forEach((entry) => {
-      const key = buildDetailStorageKey(entry.id);
-      if (window.localStorage.getItem(key)) {
-        persistDetailSnapshot(entry);
-      }
-    });
-  }, [entries]);
-
-  useEffect(() => {
-    if (!DETAIL_STORAGE_AVAILABLE) return;
-
-    try {
-      if (!entries.length) {
-        window.localStorage.removeItem(ENTRY_STORAGE_KEY);
-        return;
-      }
-
-      const serializable: PersistedUploadEntry[] = entries.map((entry) => {
-        const { file, binFile, ...persistable } = entry;
-        void file;
-        void binFile;
-        return { ...persistable };
-      });
-      window.localStorage.setItem(ENTRY_STORAGE_KEY, JSON.stringify(serializable));
-    } catch (error) {
-      console.warn("Failed to persist uploads.", error);
-    }
-  }, [entries]);
-
-  useEffect(() => {
-    if (!DETAIL_STORAGE_AVAILABLE) return;
-
-    try {
-      if (!completedDocuments.length) {
-        window.localStorage.removeItem(COMPLETED_STORAGE_KEY);
-        return;
-      }
-
-      window.localStorage.setItem(COMPLETED_STORAGE_KEY, JSON.stringify(completedDocuments));
-    } catch (error) {
-      console.warn("Failed to persist completed documents.", error);
-    }
-  }, [completedDocuments]);
-
-  // Open the per-document detail page, falling back to same-tab navigation.
-  const openEntryDetails = useCallback((entry: UploadEntry) => {
-    persistDetailSnapshot(entry);
-
-    const detailUrl = `/documents/${encodeURIComponent(entry.id)}`;
+    const detailUrl = `/documents/${encodeURIComponent(identifier)}`;
     const detailWindow = window.open(detailUrl, "_blank", "noopener,noreferrer");
 
     if (!detailWindow) {
@@ -407,7 +234,7 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
           progress: 0,
           transactionStatus: "error",
           transactionError: message,
-          transactionHash: null,
+          transactionHash: undefined,
           transactionUrl: null,
         });
       };
@@ -423,6 +250,10 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
         finalizeWithError("Please connect your wallet.");
         return;
       }
+
+      syncEntry({
+        notaryAddress: wallet.address,
+      });
 
       if (!file) {
         finalizeWithError("Original PDF unavailable. Please upload the document again.");
@@ -488,7 +319,7 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
           syncEntry({
             transactionStatus: "error",
             transactionError: "Binary hash unavailable. Unable to submit notarization.",
-            transactionHash: null,
+            transactionHash: undefined,
             transactionUrl: null,
           });
           return;
@@ -531,7 +362,7 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
           syncEntry({
             transactionStatus: "error",
             transactionError: message,
-            transactionHash: null,
+            transactionHash: undefined,
             transactionUrl: null,
           });
         }
@@ -544,8 +375,6 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
       });
 
       await attemptTransactionSignature();
-
-      persistDetailSnapshot(currentEntry);
 
       setCompletedDocuments((prev) => {
         const next = prev.filter((document) => document.id !== currentEntry.id);

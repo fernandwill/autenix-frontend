@@ -18,9 +18,46 @@ export type DocumentDetailSnapshot = {
   transactionUrl: string | null;
   transactionStatus?: TransactionStatus;
   error: string | null;
+  notaryAddress: string | null;
+  notarizationAccount: string | null;
+  hashVersion: number | null;
+  bump: number | null;
+  additional: number | null;
 };
 
-export const DOCUMENT_DETAIL_STORAGE_PREFIX = "document-detail:";
+export type DocumentIdentifierParts = {
+  notary: string;
+  hash: string;
+  version: number;
+};
 
-// Compose the localStorage key used to persist document details.
-export const buildDetailStorageKey = (id: string) => `${DOCUMENT_DETAIL_STORAGE_PREFIX}${id}`;
+const DOCUMENT_IDENTIFIER_SEPARATOR = "_";
+
+export const composeDocumentIdentifier = ({
+  notary,
+  hash,
+  version,
+}: DocumentIdentifierParts): string => `${notary}${DOCUMENT_IDENTIFIER_SEPARATOR}${hash}${DOCUMENT_IDENTIFIER_SEPARATOR}${version}`;
+
+export const parseDocumentIdentifier = (identifier: string): DocumentIdentifierParts | null => {
+  const parts = identifier.split(DOCUMENT_IDENTIFIER_SEPARATOR);
+  if (parts.length !== 3) {
+    return null;
+  }
+
+  const [notary, hash, rawVersion] = parts;
+  if (!notary || !hash) {
+    return null;
+  }
+
+  if (!/^[0-9a-fA-F]{64}$/.test(hash)) {
+    return null;
+  }
+
+  const version = Number.parseInt(rawVersion, 10);
+  if (!Number.isFinite(version) || version < 0 || version > 255) {
+    return null;
+  }
+
+  return { notary, hash, version };
+};

@@ -10,21 +10,15 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
-const STORAGE_KEY = "autenix-theme";
-
 function getInitialTheme(): Theme {
   if (typeof window === "undefined") {
     return "dark";
   }
 
-  const storedTheme = window.localStorage.getItem(STORAGE_KEY);
-  if (storedTheme === "light" || storedTheme === "dark") {
-    window.document.documentElement.classList.add(storedTheme);
-    return storedTheme;
-  }
-
-  window.document.documentElement.classList.add("dark");
-  return "dark";
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const initialTheme: Theme = prefersDark ? "dark" : "light";
+  window.document.documentElement.classList.add(initialTheme);
+  return initialTheme;
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
@@ -34,7 +28,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const root = window.document.documentElement;
     root.classList.remove("light", "dark");
     root.classList.add(theme);
-    window.localStorage.setItem(STORAGE_KEY, theme);
   }, [theme]);
 
   const value = useMemo<ThemeContextValue>(

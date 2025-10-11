@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -15,25 +15,15 @@ import type { LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
-import type { DocumentDetailSnapshot } from "@/lib/upload-types";
-import { buildDetailStorageKey } from "@/lib/upload-types";
+import { getSolanaClient } from "@/lib/solana/client";
+import { getNotarizationAccountDetails } from "@/lib/solana/notarization-account";
+import {
+  parseDocumentIdentifier,
+  type DocumentDetailSnapshot,
+} from "@/lib/upload-types";
+import { getExplorerLink } from "gill";
 
-// Retrieve a stored document snapshot from localStorage when available.
-const loadSnapshot = (id: string): DocumentDetailSnapshot | null => {
-  if (typeof window === "undefined") return null;
-
-  const stored = window.localStorage.getItem(buildDetailStorageKey(id));
-  if (!stored) return null;
-
-  try {
-    return JSON.parse(stored) as DocumentDetailSnapshot;
-  } catch (error) {
-    console.warn("Unable to read stored document snapshot.", error);
-    return null;
-  }
-};
-
-type CopyField = "binary" | "transaction";
+type CopyField = "binary" | "transaction" | "notary" | "account";
 type MetaItem = {
   label: string;
   value: ReactNode;
@@ -78,6 +68,25 @@ const STATUS_VISUALS: Record<"success" | "error" | "converting" | "default", Bas
     iconClass: "h-4 w-4",
   },
 } as const;
+
+const deriveExplorerCluster = (
+  urlOrMoniker: unknown,
+): "devnet" | "mainnet" | "testnet" | "localnet" | "mainnet-beta" => {
+  const normalized = (typeof urlOrMoniker === "string" ? urlOrMoniker : String(urlOrMoniker)).toLowerCase();
+
+  if (normalized.includes("devnet")) return "devnet";
+  if (normalized.includes("testnet")) return "testnet";
+  if (normalized.includes("local")) return "localnet";
+  if (normalized.includes("mainnet")) return "mainnet";
+
+  return "mainnet-beta";
+};
+
+const buildExplorerUrl = (urlOrMoniker: unknown, signature: string) =>
+  getExplorerLink({
+    cluster: deriveExplorerCluster(urlOrMoniker),
+    transaction: signature,
+  });
 
 const SIGNATURE_STATUS_VISUALS: Record<"confirmed" | "error", StatusVisual> = {
   confirmed: {
@@ -142,26 +151,105 @@ const formatVersion = (value: number | null) => {
 
 // DocumentDetailPage renders the persisted upload metadata for a specific entry.
 export function DocumentDetailPage() {
-  const { entryId } = useParams<{ entryId: string }>();
-  const [snapshot, setSnapshot] = useState<DocumentDetailSnapshot | null>(() =>
-    entryId ? loadSnapshot(entryId) : null,
+  const { documentId } = useParams<{ documentId: string }>();
+  const [searchParams] = useSearchParams();
+  const signatureParam = searchParams.get("signature");
+  const explorerParam = searchParams.get("explorer");
+  const client = useMemo(() => getSolanaClient(), []);
+  const parsedIdentifier = useMemo(
+    () => (documentId ? parseDocumentIdentifier(documentId) : null),
+    [documentId],
   );
+  const [snapshot, setSnapshot] = useState<DocumentDetailSnapshot | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<CopyField | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!entryId || typeof window === "undefined") return;
+    let cancelled = false;
 
-    const key = buildDetailStorageKey(entryId);
-    const refresh = () => setSnapshot(loadSnapshot(entryId));
-    const handleStorage = ({ key: changedKey }: StorageEvent) => {
-      if (changedKey === key) refresh();
+    const load = async () => {
+      if (!documentId) {
+        setSnapshot(null);
+        setErrorMessage("Document identifier missing.");
+        return;
+      }
+
+      if (!parsedIdentifier) {
+        setSnapshot(null);
+        setErrorMessage("Invalid document identifier.");
+        return;
+      }
+
+      setLoading(true);
+      setErrorMessage(null);
+
+      try {
+        const details = await getNotarizationAccountDetails({
+          client,
+          notary: parsedIdentifier.notary,
+          documentHashHex: parsedIdentifier.hash,
+          version: parsedIdentifier.version,
+        });
+
+        if (cancelled) return;
+
+        const timestampMs = Number.isFinite(details.timestamp)
+          ? details.timestamp * 1000
+          : Date.now();
+        const uploadedAt = new Date(timestampMs).toISOString();
+        const uploadedAtLabel = new Date(timestampMs).toLocaleString();
+
+        const transactionHash = signatureParam ?? null;
+        const transactionUrl =
+          explorerParam ??
+          (transactionHash ? buildExplorerUrl(client.urlOrMoniker, transactionHash) : null);
+
+        setSnapshot({
+          id: documentId,
+          fileName: details.documentName || "Untitled document",
+          sizeLabel: "Unavailable",
+          uploadedAt,
+          uploadedAtLabel,
+          status: "success",
+          statusLabel: "Notarized",
+          statusDescription: "Document details retrieved directly from the blockchain.",
+          version: details.version ?? null,
+          checksum: null,
+          binHash: details.hash ?? null,
+          binFileName: details.documentName || null,
+          transactionHash,
+          transactionUrl,
+          transactionStatus: transactionHash ? "confirmed" : "idle",
+          error: null,
+          notaryAddress: details.notary,
+          notarizationAccount: details.accountAddress,
+          hashVersion: details.hashVersion,
+          bump: details.bump,
+          additional: details.additional,
+        });
+      } catch (error) {
+        if (cancelled) return;
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Unable to load document details from the blockchain.";
+        setSnapshot(null);
+        setErrorMessage(message);
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
     };
 
-    refresh();
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
-  }, [entryId]);
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [client, documentId, parsedIdentifier, signatureParam, explorerParam]);
 
   useEffect(() => {
     return () => {
@@ -207,21 +295,27 @@ export function DocumentDetailPage() {
     ? [
         [
           { label: "File name", value: snapshot.fileName },
-          { label: "Size", value: snapshot.sizeLabel },
+          { label: "Binary file", value: snapshot.binFileName ?? "Unavailable", mono: true },
           { label: "Status", value: snapshot.statusLabel },
-          { label: "Version", value: formatVersion(snapshot.version) },
+          { label: "Document version", value: formatVersion(snapshot.version) },
+          {
+            label: "Hash version",
+            value: snapshot.hashVersion != null ? snapshot.hashVersion.toString() : "Unknown",
+          },
+          {
+            label: "Program bump",
+            value: snapshot.bump != null ? snapshot.bump.toString() : "Unknown",
+          },
         ],
         [
-          { label: "Uploaded at", value: snapshot.uploadedAtLabel },
-          { label: "Checksum", value: snapshot.checksum ?? "Calculating...", mono: true },
-          { label: "Binary file", value: snapshot.binFileName ?? "Generating...", mono: true },
+          { label: "On-chain timestamp", value: snapshot.uploadedAtLabel },
           {
             label: "Binary hash",
-            value: snapshot.binHash ?? "Calculating...",
+            value: snapshot.binHash ?? "Unavailable",
             mono: true,
-            copyField: "binary",
+            copyField: snapshot.binHash ? "binary" : undefined,
             copyValue: snapshot.binHash ?? undefined,
-            copyMessage: "Binary hash copied!",
+            copyMessage: snapshot.binHash ? "Binary hash copied!" : undefined,
           },
           {
             label: "Transaction hash",
@@ -241,13 +335,34 @@ export function DocumentDetailPage() {
                     )
                   : snapshot.transactionHash ?? "Awaiting confirmation...",
             mono: true,
-            copyField: transactionStatus === "error" || !snapshot?.transactionHash ? undefined : "transaction",
+            copyField:
+              transactionStatus === "error" || !snapshot?.transactionHash ? undefined : "transaction",
             copyValue:
               transactionStatus === "error" ? undefined : snapshot?.transactionHash ?? undefined,
             copyMessage:
               transactionStatus === "error" || !snapshot?.transactionHash
                 ? undefined
                 : "Transaction hash copied!",
+          },
+          {
+            label: "Notary address",
+            value: snapshot.notaryAddress ?? "Unknown",
+            mono: true,
+            copyField: snapshot.notaryAddress ? "notary" : undefined,
+            copyValue: snapshot.notaryAddress ?? undefined,
+            copyMessage: snapshot.notaryAddress ? "Notary address copied!" : undefined,
+          },
+          {
+            label: "Notarization account",
+            value: snapshot.notarizationAccount ?? "Unknown",
+            mono: true,
+            copyField: snapshot.notarizationAccount ? "account" : undefined,
+            copyValue: snapshot.notarizationAccount ?? undefined,
+            copyMessage: snapshot.notarizationAccount ? "Account address copied!" : undefined,
+          },
+          {
+            label: "Additional data",
+            value: snapshot.additional != null ? snapshot.additional.toString() : "None",
           },
         ],
       ]
@@ -265,9 +380,9 @@ export function DocumentDetailPage() {
               <ArrowLeft className="h-4 w-4" /> Back to uploads
             </Link>
           </Button>
-          {entryId ? (
+          {documentId ? (
             <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Document ID: {entryId}
+              Document ID: {documentId}
             </span>
           ) : null}
         </div>
@@ -367,15 +482,29 @@ export function DocumentDetailPage() {
           </div>
         ) : (
           <div className="mt-16 flex flex-1 flex-col items-center justify-center rounded-3xl border border-dashed border-border bg-card p-10 text-center shadow-sm">
-            <FileText className="h-10 w-10 text-muted-foreground" />
-            <h2 className="mt-6 text-xl font-semibold text-foreground">Document details unavailable</h2>
-            <p className="mt-3 max-w-md text-sm text-muted-foreground">
-              We couldn't find details for this upload. Try opening the document from the uploads page
-              again.
-            </p>
-            <Button asChild className="mt-6">
-              <Link to="/">Return to uploads</Link>
-            </Button>
+            {loading ? (
+              <>
+                <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
+                <h2 className="mt-6 text-xl font-semibold text-foreground">Fetching document details</h2>
+                <p className="mt-3 max-w-md text-sm text-muted-foreground">
+                  Retrieving notarization metadata directly from the Solana blockchain. This may take a few seconds.
+                </p>
+              </>
+            ) : (
+              <>
+                <FileText className="h-10 w-10 text-muted-foreground" />
+                <h2 className="mt-6 text-xl font-semibold text-foreground">Document details unavailable</h2>
+                <p className="mt-3 max-w-md text-sm text-muted-foreground">
+                  We couldn't find on-chain details for this identifier. Verify the link or open the document from the uploads page again.
+                </p>
+                {errorMessage ? (
+                  <p className="mt-2 max-w-md text-sm text-destructive">{errorMessage}</p>
+                ) : null}
+                <Button asChild className="mt-6">
+                  <Link to="/">Return to uploads</Link>
+                </Button>
+              </>
+            )}
           </div>
         )}
       </div>
