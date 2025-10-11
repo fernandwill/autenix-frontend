@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Route, Routes } from "react-router-dom";
+import { useCallback, useMemo, useState, type KeyboardEventHandler } from "react";
+import { Route, Routes, useNavigate } from "react-router-dom";
 
 // Main application layout stitches together uploads, hash lookup, and Solana status.
 import { FileUpload, type FileUploadDocumentChange } from "@/components/file-upload";
@@ -13,6 +13,67 @@ import { DocumentDetailPage } from "@/pages/document-detail-page";
 // HomePage combines upload, search, and wallet status workflows.
 function HomePage() {
   const [documents, setDocuments] = useState<FileUploadDocumentChange[]>([]);
+  const [searchValue, setSearchValue] = useState("");
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const navigate = useNavigate();
+
+  const hashLookup = useMemo(() => {
+    const map = new Map<string, FileUploadDocumentChange>();
+
+    documents.forEach((document) => {
+      const register = (value?: string | null) => {
+        if (!value) return;
+        const normalized = value.trim();
+        if (!normalized) return;
+        map.set(normalized, document);
+        map.set(normalized.toLowerCase(), document);
+      };
+
+      register(document.binHash);
+      register(document.transactionHash);
+    });
+
+    return map;
+  }, [documents]);
+
+  const handleSearch = useCallback(() => {
+    const rawQuery = searchValue.trim();
+    if (!rawQuery) {
+      setSearchError("Enter a binary hash or transaction hash to search.");
+      return;
+    }
+
+    const normalizedQuery = rawQuery.toLowerCase();
+    const match = hashLookup.get(rawQuery) ?? hashLookup.get(normalizedQuery);
+
+    if (!match) {
+      setSearchError(
+        "No document matches that hash. Upload the file first or check the hash and try again.",
+      );
+      return;
+    }
+
+    setSearchError(null);
+    setSearchValue("");
+    navigate(`/documents/${encodeURIComponent(match.id)}`);
+  }, [hashLookup, navigate, searchValue]);
+
+  const handleInputChange = useCallback((value: string) => {
+    setSearchValue(value);
+    if (searchError) {
+      setSearchError(null);
+    }
+  }, [searchError]);
+
+  const handleInputKeyDown = useCallback<KeyboardEventHandler<HTMLInputElement>>(
+    (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        handleSearch();
+      }
+    },
+    [handleSearch],
+  );
 
   return (
     <div className="relative flex min-h-screen flex-col bg-muted">
@@ -36,13 +97,22 @@ function HomePage() {
               <Input
                 id="document-hash-input"
                 placeholder="Enter document hash..."
+                value={searchValue}
+                onChange={(event) => handleInputChange(event.target.value)}
+                onKeyDown={handleInputKeyDown}
                 className="sm:flex-1"
                 aria-label="Document hash search input"
+                aria-describedby={searchError ? "document-hash-error" : undefined}
               />
-              <Button type="button" className="sm:self-start">
+              <Button type="button" className="sm:self-start" onClick={handleSearch}>
                 Search
               </Button>
             </div>
+            {searchError ? (
+              <p id="document-hash-error" className="mt-2 text-sm text-destructive">
+                {searchError}
+              </p>
+            ) : null}
           </div>
           <DocumentSummaryCard documents={documents} />
         </div>
