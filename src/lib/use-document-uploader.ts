@@ -366,9 +366,6 @@ export const useDocumentUploader = ({
       if (!accepted.length) return;
 
       const targetVersion = clampVersion(documentVersion);
-      if (targetVersion !== documentVersion) {
-        setDocumentVersion(targetVersion);
-      }
 
       const preparedEntries = accepted.map((file) => ({
         id: nanoid(),

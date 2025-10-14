@@ -14,9 +14,6 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import {
-  MIN_VERSION,
-  MAX_VERSION,
-  clampVersion,
   deriveDocumentIdentifier,
   useDocumentUploader,
   type FileUploadDocumentChange,
@@ -27,6 +24,8 @@ import {
 type FileUploadProps = {
   onDocumentsChange?: (documents: FileUploadDocumentChange[]) => void;
 };
+
+const INITIAL_VERSION = 1;
 
 // Transform raw byte counts into a human readable label (e.g. "2.5 MB").
 const formatBytes = (bytes: number) => {
@@ -39,11 +38,10 @@ const formatBytes = (bytes: number) => {
 // FileUpload coordinates PDF ingestion, notarization, and status updates.
 export function FileUpload({ onDocumentsChange }: FileUploadProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const { entries, documentVersion, setDocumentVersion, stageEntries, clearEntry, clearAll } =
-    useDocumentUploader({
-      initialVersion: 1,
-      onDocumentsChange,
-    });
+  const { entries, stageEntries, clearEntry, clearAll } = useDocumentUploader({
+    initialVersion: INITIAL_VERSION,
+    onDocumentsChange,
+  });
 
   // Open the per-document detail page, falling back to same-tab navigation.
   const openEntryDetails = useCallback((entry: UploadEntry) => {
@@ -109,33 +107,6 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
       </CardHeader>
 
       <CardContent className="space-y-6">
-        <div className="grid gap-2 sm:max-w-xs">
-          <Label htmlFor="document-version-input" className="text-sm font-medium text-muted-foreground">
-            Document version
-          </Label>
-          <Input
-            id="document-version-input"
-            type="number"
-            inputMode="numeric"
-            min={MIN_VERSION}
-            max={MAX_VERSION}
-            step={1}
-            value={documentVersion}
-            onChange={(event) => {
-              const nextValue = Number.parseInt(event.target.value, 10);
-              setDocumentVersion(Number.isNaN(nextValue) ? MIN_VERSION : clampVersion(nextValue));
-            }}
-            onBlur={(event) => {
-              const nextValue = Number.parseInt(event.target.value, 10);
-              setDocumentVersion(Number.isNaN(nextValue) ? MIN_VERSION : clampVersion(nextValue));
-            }}
-            aria-describedby="document-version-helper"
-          />
-          <p id="document-version-helper" className="text-xs text-muted-foreground">
-            Applied to new uploads. Accepts only whole number (ex. 1).
-          </p>
-        </div>
-
         <Label
           htmlFor="file-input"
           onDragOver={(event) => event.preventDefault()}
