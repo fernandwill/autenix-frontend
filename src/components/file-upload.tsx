@@ -1,7 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Address } from "gill";
+import { useCallback, useMemo, useRef } from "react";
 import { CheckCircle2, FileText, Loader2, Upload, X } from "lucide-react";
-import { nanoid } from "nanoid";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -14,111 +12,20 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { composeDocumentIdentifier, type TransactionStatus, type UploadStatus } from "@/lib/upload-types";
 import { cn } from "@/lib/utils";
-import { getSolanaClient } from "@/lib/solana/client";
-import { submitNotarizationTransaction } from "@/lib/solana/transactions";
-import { useSolanaWallet } from "@/lib/solana/wallet-context";
-
-export type FileUploadDocumentChange = {
-  id: string;
-  fileName: string;
-  timestamp: string;
-  checksum: string | null;
-  binHash: string | null;
-  binFileName: string | null;
-  version: number | null;
-  transactionHash: string | null;
-  transactionUrl: string | null;
-  transactionStatus: TransactionStatus;
-  notaryAddress: string | null;
-  documentIdentifier: string | null;
-  error?: string | null;
-};
+import {
+  MIN_VERSION,
+  MAX_VERSION,
+  clampVersion,
+  deriveDocumentIdentifier,
+  useDocumentUploader,
+  type FileUploadDocumentChange,
+  type UploadEntry,
+  ACCEPTED_TYPES,
+} from "@/lib/use-document-uploader";
 
 type FileUploadProps = {
   onDocumentsChange?: (documents: FileUploadDocumentChange[]) => void;
-};
-
-interface UploadEntry {
-  id: string;
-  file: File | null;
-  fileName: string;
-  fileSize: number;
-  fileType: string;
-  progress: number;
-  status: UploadStatus;
-  uploadedAt: string;
-  checksum?: string;
-  binHash?: string;
-  binFile?: File | null;
-  binFileName?: string;
-  version: number;
-  error?: string;
-  transactionHash?: string;
-  transactionUrl?: string | null;
-  transactionStatus?: TransactionStatus;
-  transactionError?: string;
-  notaryAddress?: Address<string> | null;
-}
-
-const MAX_FILE_SIZE = 25 * 1024 * 1024;
-const ACCEPTED_TYPES = ["application/pdf"] as const;
-const MIN_VERSION = 0;
-const MAX_VERSION = 255;
-
-// Bound user-supplied versions to the valid 0–255 range enforced on-chain.
-const clampVersion = (value: number): number => {
-  const normalized = Number.isFinite(value) ? Math.trunc(value) : MIN_VERSION;
-  return Math.min(Math.max(normalized, MIN_VERSION), MAX_VERSION);
-};
-
-// Convert an internal upload entry into the consumer-friendly document summary shape.
-const mapEntryToDocumentChange = (entry: UploadEntry): FileUploadDocumentChange => {
-  const {
-    id,
-    fileName,
-    uploadedAt: timestamp,
-    checksum,
-    binHash,
-    binFileName,
-    binFile,
-    version,
-    transactionHash,
-    transactionUrl,
-    transactionStatus,
-    notaryAddress,
-    transactionError,
-    error,
-  } = entry;
-  const documentIdentifier = deriveDocumentIdentifier(entry);
-
-  return {
-    id: documentIdentifier ?? id,
-    fileName,
-    timestamp,
-    checksum: checksum ?? null,
-    binHash: binHash ?? null,
-    binFileName: binFileName ?? binFile?.name ?? null,
-    version: version ?? null,
-    transactionHash: transactionHash ?? null,
-    transactionUrl: transactionUrl ?? null,
-    transactionStatus: transactionStatus ?? "idle",
-    notaryAddress: notaryAddress ?? null,
-    documentIdentifier,
-    error: transactionError ?? error ?? null,
-  };
-};
-
-// Determine whether the provided file is a supported PDF document.
-const isPdfFile = (file: File) =>
-  ACCEPTED_TYPES.includes(file.type as (typeof ACCEPTED_TYPES)[number]) ||
-  file.name.toLowerCase().endsWith(".pdf");
-
-// Generate the default .bin filename that mirrors the uploaded PDF name.
-const deriveBinFileName = (fileName: string) => {
-  const trimmed = fileName.replace(/\.pdf$/i, "");
-  return `${trimmed}.bin`;
 };
 
 // Transform raw byte counts into a human readable label (e.g. "2.5 MB").
@@ -129,88 +36,14 @@ const formatBytes = (bytes: number) => {
   const size = (bytes / Math.pow(1024, power)).toFixed(1);
   return `${size} ${units[power]}`;
 };
-
-// Compose the canonical document identifier when both notary and hash inputs are available.
-const deriveDocumentIdentifier = (entry: Pick<UploadEntry, "notaryAddress" | "binHash" | "version">): string | null => {
-  if (!entry.notaryAddress || !entry.binHash) return null;
-
-  try {
-    return composeDocumentIdentifier({
-      notary: entry.notaryAddress,
-      hash: entry.binHash,
-      version: entry.version,
-    });
-  } catch (error) {
-    console.warn("Failed to compose document identifier.", error);
-    return null;
-  }
-};
-
-
-// Represent an array buffer as a hex string for hashes.
-const arrayBufferToHex = (buffer: ArrayBuffer) =>
-  Array.from(new Uint8Array(buffer))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-
-// Compute the checksum/hash pair needed for notarization.
-const computeDigestsFromBuffer = async (buffer: ArrayBuffer) => {
-  if (!crypto?.subtle) {
-    throw new Error("Web Crypto API is not available.");
-  }
-
-  const [checksumBuffer, hashBuffer] = await Promise.all([
-    crypto.subtle.digest("SHA-1", buffer),
-    crypto.subtle.digest("SHA-256", buffer),
-  ]);
-
-  return {
-    checksum: arrayBufferToHex(checksumBuffer),
-    hash: arrayBufferToHex(hashBuffer),
-  };
-};
-
 // FileUpload coordinates PDF ingestion, notarization, and status updates.
 export function FileUpload({ onDocumentsChange }: FileUploadProps) {
-  const [entries, setEntries] = useState<UploadEntry[]>([]);
-  const [completedDocuments, setCompletedDocuments] = useState<FileUploadDocumentChange[]>([]);
-  const [documentVersion, setDocumentVersion] = useState<number>(1);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const client = useMemo(() => getSolanaClient(), []);
-  const { address, signTransaction } = useSolanaWallet();
-
-  // Derive the connected wallet instance from the Solana wallet hook.
-  const wallet = useMemo(() => {
-    if (!address || !signTransaction) return null;
-    return {
-      address: address as Address<string>,
-      signTransaction,
-    };
-  }, [address, signTransaction]);
-
-  // Normalize timestamps into milliseconds so sorting always prefers the newest documents.
-  const toTimestampMillis = useCallback((value?: string | null) => {
-    const parsed = Date.parse(value ?? "");
-    return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
-  }, []);
-
-  // Emit completed documents to parents ordered from newest to oldest.
-  const emitDocumentsChange = useCallback(
-    (documentsToEmit: FileUploadDocumentChange[]) => {
-      if (!onDocumentsChange) return;
-
-      const sortedEntries = [...documentsToEmit].sort(
-        (a, b) => toTimestampMillis(b.timestamp) - toTimestampMillis(a.timestamp),
-      );
-
-      onDocumentsChange(sortedEntries);
-    },
-    [onDocumentsChange, toTimestampMillis],
-  );
-
-  useEffect(() => {
-    emitDocumentsChange(completedDocuments);
-  }, [completedDocuments, emitDocumentsChange]);
+  const { entries, documentVersion, setDocumentVersion, stageEntries, clearEntry, clearAll } =
+    useDocumentUploader({
+      initialVersion: 1,
+      onDocumentsChange,
+    });
 
   // Open the per-document detail page, falling back to same-tab navigation.
   const openEntryDetails = useCallback((entry: UploadEntry) => {
@@ -230,220 +63,6 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
   }, []);
 
   // Convert an upload entry by hashing it and submitting a notarization transaction on Solana.
-  const convertEntry = useCallback(
-    async (entry: UploadEntry) => {
-      const { id, file } = entry;
-      let currentEntry: UploadEntry = entry;
-      const normalizedVersion = clampVersion(currentEntry.version);
-      if (normalizedVersion !== currentEntry.version) {
-        currentEntry = { ...currentEntry, version: normalizedVersion };
-      }
-      let computedBinHash: string | null = entry.binHash ?? null;
-      let binFile: File | null = entry.binFile ?? null;
-      let binFileName = entry.binFileName ?? deriveBinFileName(entry.fileName);
-
-      // Apply entry updates and refresh state with the latest entry snapshot.
-      const syncEntry = (updates: Partial<UploadEntry>) => {
-        currentEntry = { ...currentEntry, ...updates };
-        setEntries((prev) => prev.map((item) => (item.id === id ? currentEntry : item)));
-      };
-
-      // Finalize the current entry in an error state and surface the reason to the UI.
-      const finalizeWithError = (message: string) => {
-        syncEntry({
-          status: "error",
-          error: message,
-          progress: 0,
-          transactionStatus: "error",
-          transactionError: message,
-          transactionHash: undefined,
-          transactionUrl: null,
-        });
-      };
-
-      syncEntry({
-        status: "converting",
-        progress: currentEntry.progress > 0 ? currentEntry.progress : 5,
-        error: undefined,
-        transactionError: undefined,
-      });
-
-      if (!wallet) {
-        finalizeWithError("Please connect your wallet.");
-        return;
-      }
-
-      syncEntry({
-        notaryAddress: wallet.address,
-      });
-
-      if (!file) {
-        finalizeWithError("Original PDF unavailable. Please upload the document again.");
-        return;
-      }
-
-      if (!isPdfFile(file)) {
-        finalizeWithError("Unsupported file type. Only PDF documents are supported.");
-        return;
-      }
-
-      let fileBuffer: ArrayBuffer;
-      try {
-        fileBuffer = await file.arrayBuffer();
-      } catch (fileReadError) {
-        const message =
-          fileReadError instanceof Error
-            ? fileReadError.message
-            : "Unable to read the PDF file.";
-        finalizeWithError(message);
-        return;
-      }
-
-      try {
-        if (!binFile) {
-          try {
-            binFile = new File([fileBuffer], binFileName, {
-              type: "application/octet-stream",
-            });
-            binFileName = binFile.name;
-          } catch (conversionError) {
-            const message =
-              conversionError instanceof Error
-                ? conversionError.message
-                : "Unable to convert the PDF into a binary document.";
-            finalizeWithError(message);
-            return;
-          }
-        }
-
-        const { checksum, hash } = await computeDigestsFromBuffer(fileBuffer);
-        computedBinHash = hash;
-        syncEntry({
-          checksum,
-          binHash: hash,
-          binFile: binFile ?? null,
-          binFileName,
-        });
-      } catch (digestError) {
-        console.warn("Failed to compute file digests.", digestError);
-      }
-
-      // Attempt to submit the notarization transaction through the connected wallet.
-      const attemptTransactionSignature = async () => {
-        syncEntry({
-          transactionStatus: "pending",
-          transactionError: undefined,
-          transactionUrl: null,
-        });
-
-        const documentHashHex = computedBinHash ?? currentEntry.binHash ?? null;
-        if (!documentHashHex) {
-          syncEntry({
-            transactionStatus: "error",
-            transactionError: "Binary hash unavailable. Unable to submit notarization.",
-            transactionHash: undefined,
-            transactionUrl: null,
-          });
-          return;
-        }
-
-        try {
-          const { signature, explorerUrl } = await submitNotarizationTransaction({
-            client,
-            wallet,
-            documentHashHex,
-            documentName: currentEntry.binFileName ?? binFileName,
-            version: currentEntry.version,
-          });
-
-          syncEntry({
-            transactionHash: signature,
-            transactionStatus: "confirmed",
-            transactionError: undefined,
-            transactionUrl: explorerUrl,
-          });
-        } catch (error) {
-          const rejectionCode = (error as { code?: number })?.code;
-          const message =
-            error instanceof Error
-              ? error.message
-              : "Failed to submit the notarization transaction.";
-          const rejected =
-            rejectionCode === 4001 ||
-            /reject/i.test(message);
-
-          if (rejected) {
-            syncEntry({
-              transactionStatus: "cancelled",
-              transactionError: undefined,
-              transactionUrl: null,
-            });
-            return;
-          }
-
-          syncEntry({
-            transactionStatus: "error",
-            transactionError: message,
-            transactionHash: undefined,
-            transactionUrl: null,
-          });
-        }
-      };
-
-      syncEntry({ progress: 100 });
-      syncEntry({
-        status: "success",
-        progress: 100,
-      });
-
-      await attemptTransactionSignature();
-
-      setCompletedDocuments((prev) => {
-        const next = prev.filter((document) => document.id !== currentEntry.id);
-        return [...next, mapEntryToDocumentChange(currentEntry)];
-      });
-
-      setEntries((prev) => prev.filter((item) => item.id !== id));
-    },
-    [client, wallet],
-  );
-
-  // Stage valid PDFs for conversion and trigger processing.
-  const stageEntries = useCallback(
-    (fileList: FileList | null) => {
-      const accepted = Array.from(fileList ?? []).filter(
-        (file) => isPdfFile(file) && file.size <= MAX_FILE_SIZE,
-      );
-      if (!accepted.length) return;
-
-      const targetVersion = clampVersion(documentVersion);
-      if (targetVersion !== documentVersion) {
-        setDocumentVersion(targetVersion);
-      }
-
-      const preparedEntries = accepted.map((file) => ({
-        id: nanoid(),
-        file,
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type,
-        progress: 0,
-        status: "idle" as UploadStatus,
-        uploadedAt: new Date().toISOString(),
-        transactionStatus: "idle" as TransactionStatus,
-        binFile: null,
-        binFileName: deriveBinFileName(file.name),
-        version: targetVersion,
-      } satisfies UploadEntry));
-
-      setEntries((prev) => [...prev, ...preparedEntries]);
-
-      preparedEntries.forEach((newEntry) => {
-        void convertEntry(newEntry);
-      });
-    },
-    [convertEntry, documentVersion],
-  );
 
   // Support drag-and-drop uploads as an alternative to the file picker.
   const onDrop = useCallback(
@@ -468,15 +87,6 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
   }, [entries]);
 
   // Remove a single entry from the list.
-  const clearEntry = useCallback((id: string) => {
-    setEntries((prev) => prev.filter((entry) => entry.id !== id));
-  }, []);
-
-  // Clear all entries.
-  const clearAll = useCallback(() => {
-    setEntries([]);
-  }, []);
-
   // Support keyboard activation for entry navigation.
   const handleEntryKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLLIElement>, entry: UploadEntry) => {
