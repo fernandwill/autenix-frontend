@@ -236,7 +236,7 @@ export function DocumentSummaryCard({
                       <Button
                         asChild
                         size="sm"
-                        variant="outline"
+                        variant="default"
                         className="h-8 rounded-md px-2 text-xs"
                       >
                         <Link to={buildDocumentUpdateLink(document)}>Update</Link>

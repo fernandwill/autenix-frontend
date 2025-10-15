@@ -370,7 +370,7 @@ export function DocumentDetailPage() {
               </span>
             ) : null}
             {encodedDocumentId ? (
-              <Button asChild size="sm" variant="outline" className="h-8">
+              <Button asChild size="sm" variant="default" className="h-8">
                 <Link to={`/documents/${encodedDocumentId}/update`}>Update document</Link>
               </Button>
             ) : null}
