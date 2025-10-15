@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -108,6 +108,7 @@ export function DocumentSummaryCard({
   error,
   walletAddress,
 }: DocumentSummaryCardProps) {
+  const navigate = useNavigate();
   const hasDocuments = documents.length > 0;
   const sortedDocuments = useMemo(() => {
     return [...documents].sort((a, b) => {
@@ -176,6 +177,10 @@ export function DocumentSummaryCard({
     return items;
   }, [activePage, totalPages]);
 
+  const handleRowActivate = (document: FileUploadDocumentChange) => {
+    navigate(buildDocumentDetailLink(document));
+  };
+
   return (
     <Card className="w-full">
       <CardHeader>
@@ -194,19 +199,28 @@ export function DocumentSummaryCard({
           <>
             <div className="overflow-x-auto">
               <table className="min-w-full table-fixed text-left text-sm">
-              <thead>
-                <tr className="border-b border-border text-muted-foreground">
-                  <th className="w-[28%] px-4 py-3 font-medium">Document</th>
-                  <th className="w-[24%] px-4 py-3 font-medium">Created at</th>
-                  <th className="w-[24%] px-4 py-3 font-medium">Document hash</th>
-                  <th className="w-[24%] px-4 py-3 font-medium">Transaction hash</th>
-                </tr>
-              </thead>
-              <tbody>
+                <thead>
+                  <tr className="border-b border-border text-muted-foreground">
+                    <th className="w-[28%] px-4 py-3 font-medium">Document</th>
+                    <th className="w-[24%] px-4 py-3 font-medium">Created at</th>
+                    <th className="w-[24%] px-4 py-3 font-medium">Document hash</th>
+                    <th className="w-[24%] px-4 py-3 font-medium">Transaction hash</th>
+                  </tr>
+                </thead>
+                <tbody>
                 {paginatedDocuments.map((document) => (
                   <tr
                     key={document.id}
                     className="group cursor-pointer border-b border-border last:border-b-0 hover:bg-muted/60 focus-visible:bg-muted/60"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleRowActivate(document)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " " || event.key === "Spacebar") {
+                        event.preventDefault();
+                        handleRowActivate(document);
+                      }
+                    }}
                   >
                     <td className="w-[28%] px-4 py-3 align-top text-foreground">
                       <Link
@@ -242,12 +256,19 @@ export function DocumentSummaryCard({
                         variant="default"
                         className="h-8 rounded-md px-2 text-xs"
                       >
-                        <Link to={buildDocumentUpdateLink(document)}>Update</Link>
+                        <Link
+                          to={buildDocumentUpdateLink(document)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                          }}
+                        >
+                          Update
+                        </Link>
                       </Button>
                     </td>
                   </tr>
                 ))}
-              </tbody>
+                </tbody>
               </table>
             </div>
             {totalPages > 1 ? (
