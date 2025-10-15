@@ -405,8 +405,7 @@ export const useDocumentUploader = ({
     setDocumentVersion,
     stageEntries,
     clearEntry,
-    clearAll,
-    wallet,
+    clearAll
   };
 };
 

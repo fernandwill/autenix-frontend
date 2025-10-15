@@ -360,7 +360,7 @@ export function DocumentDetailPage() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <Button variant="ghost" asChild className="gap-2">
             <Link to="/">
-              <ArrowLeft className="h-4 w-4" /> Back to uploads
+              <ArrowLeft className="h-4 w-4" /> Back to dashboard
             </Link>
           </Button>
           <div className="flex flex-wrap items-center gap-3">

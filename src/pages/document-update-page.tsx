@@ -317,7 +317,7 @@ export function DocumentUpdatePage() {
       <div className="mx-auto flex min-h-screen max-w-4xl flex-col px-4 py-10">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <Button variant="ghost" asChild className="gap-2">
-            <Link to={encodedDocumentId ? `/documents/${encodedDocumentId}` : "/"}>
+            <Link to="/">
               <ArrowLeft className="h-4 w-4" /> Back to dashboard
             </Link>
           </Button>
