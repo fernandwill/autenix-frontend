@@ -647,7 +647,7 @@ export function DocumentDetailPage() {
                 ))}
               </div>
 
-            <div className="border-t border-border bg-muted/20 px-8 py-10">
+            <div id="update" className="border-t border-border bg-muted/20 px-8 py-10">
               <Card className="w-full border border-dashed border-border/60 bg-card shadow-sm">
                 <CardHeader>
                   <CardTitle className="text-xl">Update document</CardTitle>

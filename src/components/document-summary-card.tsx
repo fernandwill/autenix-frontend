@@ -44,6 +44,32 @@ const formatDocumentHash = (document: FileUploadDocumentChange) =>
 const formatDocumentName = (document: FileUploadDocumentChange) =>
   document.fileName ?? document.binFileName ?? FALLBACK;
 
+const buildDocumentDetailLink = (
+  document: FileUploadDocumentChange,
+  { hash }: { hash?: string } = {},
+) => {
+  const params = new URLSearchParams();
+  if (document.transactionHash) {
+    params.set("signature", document.transactionHash);
+  }
+  if (document.transactionUrl) {
+    params.set("explorer", document.transactionUrl);
+  }
+
+  const search = params.toString();
+  const normalizedHash = hash
+    ? hash.startsWith("#")
+      ? hash
+      : `#${hash}`
+    : undefined;
+
+  return {
+    pathname: `/documents/${document.id}`,
+    search: search ? `?${search}` : "",
+    ...(normalizedHash ? { hash: normalizedHash } : {}),
+  };
+};
+
 type TransactionDisplayOptions = {
   subtle?: boolean;
 };
@@ -112,7 +138,15 @@ export function DocumentSummaryCard({
                 {sortedDocuments.map((document) => (
                   <tr key={document.id} className="border-b border-border last:border-b-0">
                     <td className="w-[28%] px-4 py-3 align-top text-foreground">
-                      <div className="font-medium">{formatDocumentName(document)}</div>
+                      <Link
+                        to={buildDocumentDetailLink(document)}
+                        className="font-medium text-primary underline-offset-2 hover:underline"
+                      >
+                        {formatDocumentName(document)}{" "}
+                        <span className="text-sm text-muted-foreground">
+                          (Version {document.version == null ? "N/A" : document.version + 1})
+                        </span>
+                      </Link>
                       <div className="mt-1 space-y-1 text-xs text-muted-foreground">
                         {document.documentIdentifier ? (
                           <div className="break-all">{document.documentIdentifier}</div>
@@ -135,24 +169,7 @@ export function DocumentSummaryCard({
                         variant="outline"
                         className="h-8 rounded-md px-2 text-xs"
                       >
-                        <Link
-                          to={{
-                            pathname: `/documents/${document.id}`,
-                            search: (() => {
-                              const params = new URLSearchParams();
-                              if (document.transactionHash) {
-                                params.set("signature", document.transactionHash);
-                              }
-                              if (document.transactionUrl) {
-                                params.set("explorer", document.transactionUrl);
-                              }
-                              const query = params.toString();
-                              return query ? `?${query}` : "";
-                            })(),
-                          }}
-                        >
-                          View Details
-                        </Link>
+                        <Link to={buildDocumentDetailLink(document, { hash: "#update" })}>Update</Link>
                       </Button>
                     </td>
                   </tr>
