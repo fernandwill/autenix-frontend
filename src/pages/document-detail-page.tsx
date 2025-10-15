@@ -132,6 +132,20 @@ export function DocumentDetailPage() {
   const [searchParams] = useSearchParams();
   const signatureParam = searchParams.get("signature");
   const explorerParam = searchParams.get("explorer");
+  const trustedExplorerParam = useMemo(() => {
+    if (!explorerParam) return null;
+    try {
+      const base = typeof window !== "undefined" ? window.location.origin : "http://localhost";
+      const url = new URL(explorerParam, base);
+      if (url.protocol === "http:" || url.protocol === "https:") {
+        return explorerParam;
+      }
+      // Ignore untrusted schemes so explorer URLs can't trigger custom protocols.
+      return null;
+    } catch {
+      return null;
+    }
+  }, [explorerParam]);
   const client = useMemo(() => getSolanaClient(), []);
   const parsedIdentifier = useMemo(
     () => (documentId ? parseDocumentIdentifier(documentId) : null),
@@ -184,7 +198,7 @@ export function DocumentDetailPage() {
 
         const transactionHash = signatureParam ?? null;
         const transactionUrl =
-          explorerParam ??
+          trustedExplorerParam ??
           (transactionHash ? buildExplorerUrl(client.urlOrMoniker, transactionHash) : null);
 
         setSnapshot({
@@ -236,7 +250,7 @@ export function DocumentDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [client, documentId, parsedIdentifier, signatureParam, explorerParam]);
+  }, [client, documentId, parsedIdentifier, signatureParam, trustedExplorerParam]);
 
   useEffect(() => {
     return () => {
