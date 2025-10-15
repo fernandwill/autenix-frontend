@@ -19,6 +19,7 @@ import { getSolanaClient } from "@/lib/solana/client";
 import { buildExplorerUrl } from "@/lib/solana/explorer";
 import { getNotarizationAccountDetails } from "@/lib/solana/notarization-account";
 import { parseDocumentIdentifier, type DocumentDetailSnapshot } from "@/lib/upload-types";
+import { formatVersion } from "@/lib/format";
 type CopyField = "binary" | "transaction" | "notary" | "account";
 type MetaItem = {
   label: string;
@@ -119,11 +120,6 @@ const deriveStatusDescription = (snapshot: DocumentDetailSnapshot | null): strin
   }
 
   return snapshot.statusDescription;
-};
-
-const formatVersion = (value: number | null) => {
-  if (value == null) return "Not set";
-  return (value + 1).toString();
 };
 
 // DocumentDetailPage renders the persisted upload metadata for a specific entry.

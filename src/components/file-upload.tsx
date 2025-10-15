@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
   deriveDocumentIdentifier,
@@ -27,14 +28,6 @@ type FileUploadProps = {
 
 const INITIAL_VERSION = 1;
 
-// Transform raw byte counts into a human readable label (e.g. "2.5 MB").
-const formatBytes = (bytes: number) => {
-  if (!bytes) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  const power = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  const size = (bytes / Math.pow(1024, power)).toFixed(1);
-  return `${size} ${units[power]}`;
-};
 // FileUpload coordinates PDF ingestion, notarization, and status updates.
 export function FileUpload({ onDocumentsChange }: FileUploadProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
