@@ -74,8 +74,6 @@ export async function submitNotarizationTransaction({
     notary: wallet.address,
   });
 
-  console.log(instruction);
-
   const transactionMessage = createTransaction({
     version: "legacy",
     feePayer: createNoopSigner(wallet.address),
