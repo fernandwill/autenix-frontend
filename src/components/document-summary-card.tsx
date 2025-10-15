@@ -70,6 +70,10 @@ const buildDocumentDetailLink = (
   };
 };
 
+const buildDocumentUpdateLink = (document: FileUploadDocumentChange) => ({
+  pathname: `/documents/${encodeURIComponent(document.id)}/update`,
+});
+
 type TransactionDisplayOptions = {
   subtle?: boolean;
 };
@@ -169,7 +173,7 @@ export function DocumentSummaryCard({
                         variant="outline"
                         className="h-8 rounded-md px-2 text-xs"
                       >
-                        <Link to={buildDocumentDetailLink(document, { hash: "#update" })}>Update</Link>
+                        <Link to={buildDocumentUpdateLink(document)}>Update</Link>
                       </Button>
                     </td>
                   </tr>

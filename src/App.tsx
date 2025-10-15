@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { DocumentDetailPage } from "@/pages/document-detail-page";
+import { DocumentUpdatePage } from "@/pages/document-update-page";
 import { getSolanaClient } from "@/lib/solana/client";
 import { buildExplorerUrl } from "@/lib/solana/explorer";
 import { listNotarizationAccountsByNotary } from "@/lib/solana/notarization-account";
@@ -299,6 +300,7 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
+      <Route path="/documents/:documentId/update" element={<DocumentUpdatePage />} />
       <Route path="/documents/:documentId" element={<DocumentDetailPage />} />
     </Routes>
   );
