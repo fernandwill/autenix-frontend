@@ -15,7 +15,7 @@ export function SolanaTransactionPanel({ className }: SolanaTransactionPanelProp
   const connectionCopy = isConnected
     ? {
         buttonLabel: "Disconnect Wallet",
-        buttonVariant: "outline" as const,
+        buttonVariant: "default" as const,
         action: disconnect,
       }
     : {
@@ -29,10 +29,7 @@ export function SolanaTransactionPanel({ className }: SolanaTransactionPanelProp
       <Button
         type="button"
         variant={connectionCopy.buttonVariant}
-        className={cn(
-          "min-w-[180px] items-center justify-between gap-2 px-4",
-          isConnected ? "hover:border-destructive hover:bg-destructive hover:text-destructive-foreground" : "",
-        )}
+        className={cn("min-w-[180px] items-center justify-between gap-2 px-4")}
         disabled={isConnecting}
         onClick={connectionCopy.action}
       >

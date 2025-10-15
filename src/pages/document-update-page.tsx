@@ -422,7 +422,7 @@ export function DocumentUpdatePage() {
                   </div>
                   <Button
                     type="button"
-                    variant="secondary"
+                    variant="default"
                     onClick={(event) => {
                       event.preventDefault();
                       updateInputRef.current?.click();

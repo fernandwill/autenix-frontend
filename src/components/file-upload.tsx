@@ -128,7 +128,7 @@ export function FileUpload({ onDocumentsChange }: FileUploadProps) {
           </div>
           <Button
             type="button"
-            variant="secondary"
+            variant="default"
             onClick={(event) => {
               event.preventDefault();
               inputRef.current?.click();
