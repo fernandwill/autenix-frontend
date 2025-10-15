@@ -318,7 +318,7 @@ export function DocumentUpdatePage() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <Button variant="ghost" asChild className="gap-2">
             <Link to={encodedDocumentId ? `/documents/${encodedDocumentId}` : "/"}>
-              <ArrowLeft className="h-4 w-4" /> Back to details
+              <ArrowLeft className="h-4 w-4" /> Back to dashboard
             </Link>
           </Button>
           <div className="flex flex-wrap items-center gap-3">
