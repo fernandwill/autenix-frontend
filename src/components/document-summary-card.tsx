@@ -204,7 +204,10 @@ export function DocumentSummaryCard({
               </thead>
               <tbody>
                 {paginatedDocuments.map((document) => (
-                  <tr key={document.id} className="group border-b border-border last:border-b-0">
+                  <tr
+                    key={document.id}
+                    className="group cursor-pointer border-b border-border last:border-b-0 hover:bg-muted/60 focus-visible:bg-muted/60"
+                  >
                     <td className="w-[28%] px-4 py-3 align-top text-foreground">
                       <Link
                         to={buildDocumentDetailLink(document)}
