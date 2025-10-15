@@ -52,11 +52,11 @@ function HomePage() {
       const signatures = await Promise.all(
         notarizations.map(async (item): Promise<SignatureLookupEntry> => {
           try {
-            const { value } = await client.rpc
+            const signaturesForAddress = await client.rpc
               .getSignaturesForAddress(item.accountAddress as Address<string>, { limit: 1 })
               .send();
 
-            const signature = value?.[0]?.signature ?? null;
+            const signature = signaturesForAddress?.[0]?.signature ?? null;
             return {
               accountAddress: item.accountAddress,
               signature,

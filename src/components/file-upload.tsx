@@ -21,6 +21,7 @@ import {
   type UploadEntry,
   ACCEPTED_TYPES,
 } from "@/lib/use-document-uploader";
+export type {FileUploadDocumentChange} from "@/lib/use-document-uploader";
 
 type FileUploadProps = {
   onDocumentsChange?: (documents: FileUploadDocumentChange[]) => void;
