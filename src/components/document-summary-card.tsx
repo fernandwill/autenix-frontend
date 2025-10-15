@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
@@ -14,6 +14,7 @@ interface DocumentSummaryCardProps {
 }
 
 const FALLBACK = "N/A";
+const PAGE_SIZE = 10;
 
 // Parse timestamps to milliseconds while ensuring invalid dates sort last.
 const toMillis = (value?: string | null) => {
@@ -108,10 +109,35 @@ export function DocumentSummaryCard({
   walletAddress,
 }: DocumentSummaryCardProps) {
   const hasDocuments = documents.length > 0;
-  const sortedDocuments = [...documents].sort((a, b) => {
-    const diff = (toMillis(b.timestamp) ?? Number.NEGATIVE_INFINITY) - (toMillis(a.timestamp) ?? Number.NEGATIVE_INFINITY);
-    return diff || 0;
-  });
+  const sortedDocuments = useMemo(() => {
+    return [...documents].sort((a, b) => {
+      const diff =
+        (toMillis(b.timestamp) ?? Number.NEGATIVE_INFINITY) -
+        (toMillis(a.timestamp) ?? Number.NEGATIVE_INFINITY);
+      return diff || 0;
+    });
+  }, [documents]);
+
+  const [currentPage, setCurrentPage] = useState(0);
+
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [sortedDocuments.length]);
+
+  const { totalPages, pageStart, pageEnd, paginatedDocuments, activePage } = useMemo(() => {
+    const total = Math.ceil(sortedDocuments.length / PAGE_SIZE);
+    const nextActivePage = total > 0 ? Math.min(currentPage, total - 1) : 0;
+    const start = nextActivePage * PAGE_SIZE;
+    const end = Math.min(start + PAGE_SIZE, sortedDocuments.length);
+
+    return {
+      totalPages: total,
+      pageStart: start,
+      pageEnd: end,
+      paginatedDocuments: sortedDocuments.slice(start, end),
+      activePage: nextActivePage,
+    };
+  }, [currentPage, sortedDocuments]);
 
   return (
     <Card className="w-full">
@@ -128,8 +154,9 @@ export function DocumentSummaryCard({
           </div>
         ) : null}
         {hasDocuments ? (
-          <div className="overflow-x-auto">
-            <table className="min-w-full table-fixed text-left text-sm">
+          <>
+            <div className="overflow-x-auto">
+              <table className="min-w-full table-fixed text-left text-sm">
               <thead>
                 <tr className="border-b border-border text-muted-foreground">
                   <th className="w-[28%] px-4 py-3 font-medium">Document</th>
@@ -139,7 +166,7 @@ export function DocumentSummaryCard({
                 </tr>
               </thead>
               <tbody>
-                {sortedDocuments.map((document) => (
+                {paginatedDocuments.map((document) => (
                   <tr key={document.id} className="group border-b border-border last:border-b-0">
                     <td className="w-[28%] px-4 py-3 align-top text-foreground">
                       <Link
@@ -181,8 +208,40 @@ export function DocumentSummaryCard({
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+              </table>
+            </div>
+            {totalPages > 1 ? (
+              <div className="mt-4 flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                <span>
+                  Page {activePage + 1} of {totalPages} · Showing {pageStart + 1}-{pageEnd} of {sortedDocuments.length} documents
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    aria-label="Go to previous page"
+                    onClick={() => setCurrentPage((prev) => Math.max(0, prev - 1))}
+                    disabled={activePage === 0}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    aria-label="Go to next page"
+                    onClick={() =>
+                      setCurrentPage((prev) =>
+                        totalPages === 0 ? 0 : Math.min(totalPages - 1, prev + 1),
+                      )
+                    }
+                    disabled={totalPages === 0 || activePage >= totalPages - 1}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </>
         ) : (
           <div className="rounded-lg border border-dashed border-muted-foreground/40 p-6 text-center text-sm text-muted-foreground">
             {walletAddress
