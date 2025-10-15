@@ -160,7 +160,46 @@ function HomePage() {
       const key = document.documentIdentifier;
       if (key) {
         const existing = indexed.get(key);
-        indexed.set(key, existing ? { ...existing, ...document } : document);
+        if (existing) {
+          const merged: FileUploadDocumentChange = { ...existing, ...document };
+
+          if ((document.transactionHash ?? null) == null && existing.transactionHash) {
+            merged.transactionHash = existing.transactionHash;
+          }
+
+          if ((document.transactionUrl ?? null) == null && existing.transactionUrl) {
+            merged.transactionUrl = existing.transactionUrl;
+          }
+
+          if ((document.transactionStatus ?? null) == null && existing.transactionStatus) {
+            merged.transactionStatus = existing.transactionStatus;
+          } else if ((document.transactionStatus ?? null) !== null && existing.transactionStatus) {
+            const statusPriority: Record<
+              NonNullable<FileUploadDocumentChange["transactionStatus"]>,
+              number
+            > = {
+              idle: 0,
+              pending: 1,
+              cancelled: 2,
+              error: 2,
+              confirmed: 3,
+            };
+
+            const existingStatus = existing.transactionStatus;
+            const incomingStatus = document.transactionStatus;
+
+            if (
+              incomingStatus &&
+              statusPriority[existingStatus] > statusPriority[incomingStatus]
+            ) {
+              merged.transactionStatus = existingStatus;
+            }
+          }
+
+          indexed.set(key, merged);
+        } else {
+          indexed.set(key, document);
+        }
       } else {
         unresolved.push(document);
       }
