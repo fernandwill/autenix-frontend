@@ -139,6 +139,43 @@ export function DocumentSummaryCard({
     };
   }, [currentPage, sortedDocuments]);
 
+  const paginationItems = useMemo(() => {
+    if (totalPages <= 0) return [] as Array<number | string>;
+
+    const items: Array<number | string> = [];
+    const lastPage = totalPages - 1;
+    const addItem = (value: number | string) => {
+      if (items[items.length - 1] !== value) {
+        items.push(value);
+      }
+    };
+
+    addItem(0);
+
+    if (lastPage === 0) {
+      return items;
+    }
+
+    const leftSibling = Math.max(activePage - 1, 1);
+    const rightSibling = Math.min(activePage + 1, Math.max(lastPage - 1, 1));
+
+    if (leftSibling > 1) {
+      addItem("ellipsis-left");
+    }
+
+    for (let page = leftSibling; page <= rightSibling; page += 1) {
+      addItem(page);
+    }
+
+    if (rightSibling < lastPage - 1) {
+      addItem("ellipsis-right");
+    }
+
+    addItem(lastPage);
+
+    return items;
+  }, [activePage, totalPages]);
+
   return (
     <Card className="w-full">
       <CardHeader>
@@ -215,16 +252,38 @@ export function DocumentSummaryCard({
                 <span>
                   Page {activePage + 1} of {totalPages} · Showing {pageStart + 1}-{pageEnd} of {sortedDocuments.length} documents
                 </span>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
                     aria-label="Go to previous page"
                     onClick={() => setCurrentPage((prev) => Math.max(0, prev - 1))}
                     disabled={activePage === 0}
+                    className="h-9 rounded-full px-4 text-sm"
                   >
                     Previous
                   </Button>
+                  {paginationItems.map((item, index) =>
+                    typeof item === "number" ? (
+                      <Button
+                        key={item}
+                        variant={item === activePage ? "default" : "outline"}
+                        size="sm"
+                        className="h-9 rounded-full px-4 text-sm"
+                        onClick={() => setCurrentPage(item)}
+                      >
+                        {item + 1}
+                      </Button>
+                    ) : (
+                      <span
+                        key={`${item}-${index}`}
+                        className="px-2 text-muted-foreground"
+                        aria-hidden="true"
+                      >
+                        …
+                      </span>
+                    ),
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
@@ -235,6 +294,7 @@ export function DocumentSummaryCard({
                       )
                     }
                     disabled={totalPages === 0 || activePage >= totalPages - 1}
+                    className="h-9 rounded-full px-4 text-sm"
                   >
                     Next
                   </Button>
