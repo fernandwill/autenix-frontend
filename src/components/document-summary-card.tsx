@@ -140,7 +140,7 @@ export function DocumentSummaryCard({
               </thead>
               <tbody>
                 {sortedDocuments.map((document) => (
-                  <tr key={document.id} className="border-b border-border last:border-b-0">
+                  <tr key={document.id} className="group border-b border-border last:border-b-0">
                     <td className="w-[28%] px-4 py-3 align-top text-foreground">
                       <Link
                         to={buildDocumentDetailLink(document)}
@@ -166,7 +166,9 @@ export function DocumentSummaryCard({
                     <td className="w-[24%] px-4 py-3 align-top">
                       {renderTransactionHashValue(document)}
                     </td>
-                    <td className="w-28 px-4 py-3 align-top text-right">
+                    <td
+                      className="w-28 px-4 py-3 align-top text-right opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 focus-within:opacity-100"
+                    >
                       <Button
                         asChild
                         size="sm"
