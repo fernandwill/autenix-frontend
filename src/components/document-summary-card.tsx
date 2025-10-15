@@ -248,11 +248,11 @@ export function DocumentSummaryCard({
               </table>
             </div>
             {totalPages > 1 ? (
-              <div className="mt-4 flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-                <span>
-                  Page {activePage + 1} of {totalPages} · Showing {pageStart + 1}-{pageEnd} of {sortedDocuments.length} documents
+              <div className="mt-4 flex flex-col items-center gap-3 text-sm text-muted-foreground">
+                <span className="text-sm text-muted-foreground text-center">
+                  Showing {pageStart + 1}-{pageEnd} of {sortedDocuments.length} documents
                 </span>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap justify-center items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
