@@ -1,10 +1,11 @@
 # Autenix Frontend
 
-This project is a Vite powered React application used to explore notarization workflows. It now includes:
+This project is a Vite powered React application used to explore notarization workflows. Core experiences include:
 
-- A streamlined document upload flow with checksum and hash previews.
-- Direct document detail hydration from the Solana blockchain using the notarization program accounts—no `localStorage` snapshots are required.
-- A Solana transaction demo panel that relies on the **Gill SDK** to craft and submit memo transactions.
+- **File upload notarization pipeline** – the `FileUpload` component works with `useDocumentUploader` to stream PDFs, compute hashes, and queue Gill-backed Solana notarization transactions once a wallet signs them.
+- **Wallet connection and status controls** – `SolanaTransactionPanel` exposes connect and disconnect affordances while surfacing the active address for transaction signing.
+- **On-chain hash search** – the home page in `App.tsx` lets users jump to notarized artifacts by entering a binary hash or transaction signature.
+- **Wallet-synced document summaries** – `App.tsx` merges freshly uploaded entries with notarizations fetched for the connected wallet so the dashboard mirrors on-chain state.
 
 ## Development
 
@@ -25,12 +26,17 @@ VITE_SOLANA_CLUSTER="https://api.devnet.solana.com"
 
 ### Gill SDK usage
 
-The `SolanaTransactionPanel` component demonstrates how to use `gill` to:
-
-1. Initialize a Solana RPC client (`src/lib/solana/client.ts`).
-2. Build and send a memo transaction after a wallet signs it (`src/lib/solana/transactions.ts`).
+Gill powers the notarization workflow itself rather than a standalone demo. `useDocumentUploader` (`src/lib/use-document-uploader.ts`) calls `submitNotarizationTransaction` (`src/lib/solana/transactions.ts`) to compile program instructions, obtain a wallet signature, and confirm the transaction on Solana.
 
 Any wallet that injects the [Solana Wallet Standard](https://solana.com/docs/wallets/standard) (for example Phantom) can be used to approve the transaction directly from the browser.
+
+### Document detail page
+
+`DocumentDetailPage` (`src/pages/document-detail-page.tsx`) rehydrates notarized metadata straight from the blockchain, showing status badges, explorer links, and parsed document identifiers without relying on local storage snapshots.
+
+### Document update page
+
+`DocumentUpdatePage` (`src/pages/document-update-page.tsx`) lets users upload a new revision, increment the version, and trigger another notarization. After confirmation it refreshes the on-chain snapshot so the detail view reflects the latest binary hash.
 
 ### Linting and formatting
 
