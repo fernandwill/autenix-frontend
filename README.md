@@ -1,4 +1,4 @@
-# Autenix Frontend
+# Autenix
 
 <img width="1000" height="1000" alt="{C1FADD4A-6412-464E-97E3-D036932257C8}" src="https://github.com/user-attachments/assets/a8fdd80c-ac84-48b2-a032-f59f798424b8" />
 
